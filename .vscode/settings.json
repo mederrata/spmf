@@ -1,0 +1,9 @@
+{
+    "python.linting.pylintEnabled": false,
+    "python.linting.pycodestyleEnabled": true,
+    "python.linting.enabled": true,
+    "python.pythonPath": "/usr/local/bin/python3",
+    "terminal.integrated.env.osx" : {
+      "PYTHONPATH" : "${workspaceFolder}" //Module import path
+    }
+}
