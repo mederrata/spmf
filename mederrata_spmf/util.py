@@ -499,7 +499,6 @@ def clip_gradients(fn, clip_value, dtype=tf.float64):
     return wrapper
 
 
-
 @tf.function
 def run_chain(
         init_state, step_size, target_log_prob_fn,
@@ -812,18 +811,18 @@ def fit_surrogate_posterior(target_log_prob_fn,
             name=name,
             **kwargs)
     if strategy is None:
-        return minimize(complete_variational_loss_fn,
-                        num_epochs=num_epochs,
-                        max_decay_steps=max_decay_steps,
-                        trace_fn=trace_fn,
-                        learning_rate=learning_rate,
-                        trainable_variables=trainable_variables,
-                        abs_tol=abs_tol,
-                        rel_tol=rel_tol,
-                        decay_rate=decay_rate,
-                        tf_dataset=tf_dataset,
-                        check_every=check_every,
-                        **kwargs)
+        return auto_minimize(complete_variational_loss_fn,
+                             num_epochs=num_epochs,
+                             max_decay_steps=max_decay_steps,
+                             trace_fn=trace_fn,
+                             learning_rate=learning_rate,
+                             trainable_variables=trainable_variables,
+                             abs_tol=abs_tol,
+                             rel_tol=rel_tol,
+                             decay_rate=decay_rate,
+                             tf_dataset=tf_dataset,
+                             check_every=check_every,
+                             **kwargs)
     else:
         return minimize_distributed(
             complete_variational_loss_fn,

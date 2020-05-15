@@ -65,7 +65,7 @@ class BayesianModel(object):
 
     #  @tf.function
     def calibrate_advi(
-            self, num_epochs=100, learning_rate=1.,
+            self, num_epochs=100, learning_rate=0.1,
             opt=None, abs_tol=1e-5, rel_tol=0.001,
             check_every=25, set_expectations=True, sample_size=4,
             **kwargs):

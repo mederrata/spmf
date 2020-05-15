@@ -9,11 +9,11 @@ import matplotlib.pyplot as plt
 
 
 def main():
-    N = 10000
+    N = 50000
     # Test taking in from tf.dataset, don't pre-batch
     data = tf.data.Dataset.from_tensor_slices(
         {
-            'data': np.random.poisson(3.0, size=(N, 99)),
+            'data': np.random.poisson(3.0, size=(N, 20)),
             'indices': np.arange(N),
             'normalization': np.ones(N)
         })
@@ -22,8 +22,8 @@ def main():
     # strategy = tf.distribute.MirroredStrategy()
     strategy = None
     factor = SparsePoissonLinearFactorization(
-        data, latent_dim=9, auxiliary_horseshoe=True, strategy=strategy,
-        dtype=tf.float32)
+        data, latent_dim=5, auxiliary_horseshoe=True, strategy=strategy,
+        dtype=tf.float64)
     # Test to make sure sampling works
     sample = factor.joint_prior.sample()
     # Compute the joint log probability of the sample
@@ -34,28 +34,16 @@ def main():
     prob = factor.unormalized_log_prob(
         **sample_surrogate,  data=next(iter(data)))
 
-    waic = factor.waic()
-    print(waic)
-    # test save and restore
-
-    factor.save(".test_save.pkl")
-    with open(".test_save.pkl", 'rb') as file:
-        factor2 = dill.load(file)
-
-    sample2 = factor2.surrogate_distribution.sample(10)
-
-    # Optimize
-
     losses = factor.calibrate_advi(
-        num_epochs=10, rel_tol=1e-4, learning_rate=0.2)
+        num_epochs=100, rel_tol=1e-4, learning_rate=.1)
 
-    factor.save(".test_save.pkl")
-    with open(".test_save.pkl", 'rb') as file:
-        factor2 = dill.load(file)
-
-    sample2 = factor2.surrogate_distribution.sample(10)
     waic = factor.waic()
     print(waic)
+
+    plt.imshow(factor.encoding_matrix(), vmin=0)
+    plt.show()
+    plt.imshow(factor.intercept_matrix(), vmin=0)
+    plt.show()
 
 
 if __name__ == "__main__":

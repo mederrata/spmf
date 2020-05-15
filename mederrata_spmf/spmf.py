@@ -92,9 +92,12 @@ class SparsePoissonLinearFactorization(BayesianModel):
         weights_1 = tf.expand_dims(weights[..., 0, :], -1)
         weights_2 = tf.expand_dims(weights[..., 1, :], -1)
 
-        assert isinstance(data, BatchDataset)
         encoding = weights_1*w
         log_likes = []
+
+        if not isinstance(data, BatchDataset):
+            data = [data]
+
         for record in data:
             indices = record['indices']
             batch = record['data']
@@ -143,7 +146,7 @@ class SparsePoissonLinearFactorization(BayesianModel):
             ),
             'q': tfd.Independent(
                 tfd.HalfNormal(
-                    scale=100.*tf.ones(
+                    scale=1000.*tf.ones(
                         (1, self.feature_dim), dtype=self.dtype)
                 ),
                 reinterpreted_batch_ndims=2
