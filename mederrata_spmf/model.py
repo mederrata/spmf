@@ -151,6 +151,9 @@ class BayesianModel(object):
     def log_likelihood(self, *args, **kwargs):
         pass
 
+    def psis_loo(self, data=None, params=None):
+        pass
+
     def waic(self, data=None, params=None, num_samples=100, num_splits=20):
         data = self.data if data is None else data
         likelihood_vars = inspect.getfullargspec(

@@ -25,7 +25,7 @@ from mederrata_spmf.util import (
 tfb = tfp.bijectors
 
 
-class SparsePoissonLinearFactorization(BayesianModel):
+class PoissonMatrixFactorization(BayesianModel):
     """Sparse (horseshoe) poisson matrix factorization
     Arguments:
         object {[type]} -- [description]
@@ -35,20 +35,21 @@ class SparsePoissonLinearFactorization(BayesianModel):
     var_list = []
     s_tau_scale = 1
     def forward_function(self, x): return tf.math.log(x+1.)
-    def inverse_function(self, x): return tf.math.exp(x) - 1.
+    def backward_function(self, x): return tf.math.exp(x) - 1.
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
             auxiliary_horseshoe=True,
-            w_tau_scale=1., s_tau_scale=1, symmetry_breaking_decay=0.25,
+            w_tau_scale=1., s_tau_scale=1, symmetry_breaking_decay=0.5,
             strategy=None,
-            scale_rates=True,
+            scale_rates=True, fix_s=False,
             dtype=tf.float64, **kwargs):
 
-        super(SparsePoissonLinearFactorization, self).__init__(
+        super(PoissonMatrixFactorization, self).__init__(
             data, data_transform_fn, strategy=strategy, dtype=dtype)
         self.dtype = dtype
         self.symmetry_breaking_decay = symmetry_breaking_decay
+        self.fix_s = fix_s
 
         record = next(iter(data))
         indices = record['indices']
@@ -109,7 +110,7 @@ class SparsePoissonLinearFactorization(BayesianModel):
             L = len(weights_2.shape)
             trans = tuple(list(range(L-2)) + [L-1, L-2])
             weights_2 = tf.transpose(weights_2, trans)
-            rate = self.inverse_function(tf.matmul(z_batch, u)) + weights_2*q
+            rate = self.backward_function(tf.matmul(z_batch, u)) + weights_2*q
             if 'normalization' in record.keys():
                 multiplier = record['normalization'][..., tf.newaxis]
                 for _ in range(len(rate.shape)-len(multiplier.shape)):
@@ -477,7 +478,7 @@ class SparsePoissonLinearFactorization(BayesianModel):
         L = len(weights_2.shape)
         trans = tuple(list(range(L-2)) + [L-1, L-2])
         weights_2 = tf.transpose(weights_2, trans)
-        rate = self.inverse_function(
+        rate = self.backward_function(
             tf.matmul(z, params['u'])) + weights_2*params['q']
         rate_shape = tf.shape(rate)[-2]
         new_shape = tf.unstack(tf.ones_like(tf.shape(rate)))
@@ -514,10 +515,13 @@ class SparsePoissonLinearFactorization(BayesianModel):
 
     def project(self, x, threshold=1e-1):
         return tf.matmul(
-            self.forward_function(tf.cast(x, self.dtype)), tf.matmul(tf.linalg.diag(
-                self.calibrated_expectations['s'],
-                self.calibrated_expectations['w']
-            ))
+            self.forward_function(tf.cast(x, self.dtype)),
+            tf.matmul(
+                tf.linalg.diag(
+                    self.calibrated_expectations['s'],
+                    self.calibrated_expectations['w']
+                )
+            )
         )
 
     @tf.function(input_signature=[tf.TensorSpec([None, None], tf.float64)])
@@ -563,3 +567,9 @@ class SparsePoissonLinearFactorization(BayesianModel):
             self.surrogate_distribution.trainable_variables[j].assign(
                 tf.cast(value, self.dtype))
         #  self.set_calibration_expectations()
+
+
+class PoissonMatrixFactorizationNoS(PoissonMatrixFactorization):
+    def __init__(self):
+        pass
+    pass
