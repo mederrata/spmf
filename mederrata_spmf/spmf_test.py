@@ -3,7 +3,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import dill as pickle
 
-from mederrata_spmf import SparsePoissonLinearFactorization
+from mederrata_spmf import PoissonMatrixFactorization
 
 import matplotlib.pyplot as plt
 
@@ -21,8 +21,8 @@ def main():
     data = data.batch(1000)
     # strategy = tf.distribute.MirroredStrategy()
     strategy = None
-    factor = SparsePoissonLinearFactorization(
-        data, latent_dim=5, auxiliary_horseshoe=True, strategy=strategy,
+    factor = PoissonMatrixFactorization(
+        data, latent_dim=5, strategy=strategy,
         dtype=tf.float64)
     # Test to make sure sampling works
     sample = factor.joint_prior.sample()
@@ -35,7 +35,7 @@ def main():
         **sample_surrogate,  data=next(iter(data)))
 
     losses = factor.calibrate_advi(
-        num_epochs=100, rel_tol=1e-4, learning_rate=.1)
+        num_epochs=10, rel_tol=1e-4, learning_rate=.1)
 
     waic = factor.waic()
     print(waic)

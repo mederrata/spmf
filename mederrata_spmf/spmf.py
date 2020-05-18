@@ -34,8 +34,8 @@ class PoissonMatrixFactorization(BayesianModel):
     bijectors = None
     var_list = []
     s_tau_scale = 1
-    def forward_function(self, x): return tf.math.log(x+1.)
-    def backward_function(self, x): return tf.math.exp(x) - 1.
+    def encoder_function(self, x): return tf.math.log(x+1.)
+    def decoder_function(self, x): return tf.math.exp(x) - 1.
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
@@ -48,9 +48,9 @@ class PoissonMatrixFactorization(BayesianModel):
         super(PoissonMatrixFactorization, self).__init__(
             data, data_transform_fn, strategy=strategy, dtype=dtype)
         if forward_function is not None:
-            self.forward_function = forward_function
+            self.encoder_function = forward_function
         if backward_function is not None:
-            self.backward_function = backward_function
+            self.decoder_function = backward_function
         self.dtype = dtype
         self.symmetry_breaking_decay = symmetry_breaking_decay
         self.with_s = with_s
@@ -79,7 +79,7 @@ class PoissonMatrixFactorization(BayesianModel):
         )/np.sqrt(self.feature_dim))
         self.v0 = tf.constant(tf.linalg.matrix_transpose(self.u0))
         self.z0 = tf.constant(tf.matmul(
-            self.forward_function(data),
+            self.encoder_function(data),
             self.u0))
         if self.with_s:
             self.s0 = tf.constant(
@@ -95,7 +95,7 @@ class PoissonMatrixFactorization(BayesianModel):
         weights_1 = tf.expand_dims(weights[..., 0, :], -1)
         weights_2 = tf.expand_dims(weights[..., 1, :], -1)
 
-        encoding = weights_1*w
+        encoding = weights_1*u
         log_likes = []
 
         if not isinstance(data, BatchDataset):
@@ -106,13 +106,13 @@ class PoissonMatrixFactorization(BayesianModel):
             batch = record['data']
             batch = tf.cast(batch, self.dtype)
             z_batch = tf.matmul(
-                self.forward_function(batch),
+                self.encoder_function(batch),
                 encoding
             )
             L = len(weights_2.shape)
             trans = tuple(list(range(L-2)) + [L-1, L-2])
             weights_2 = tf.transpose(weights_2, trans)
-            rate = self.backward_function(tf.matmul(z_batch, v)) + weights_2*q
+            rate = self.decoder_function(tf.matmul(z_batch, v)) + weights_2*w
             if 'normalization' in record.keys():
                 multiplier = record['normalization'][..., tf.newaxis]
                 for _ in range(len(rate.shape)-len(multiplier.shape)):
@@ -462,7 +462,7 @@ class PoissonMatrixFactorization(BayesianModel):
 
         encoding = weights_1*params['u']
         z = tf.matmul(
-            self.forward_function(data),
+            self.encoder_function(data),
             encoding)
         rv_z = tfd.Independent(
             tfd.HalfNormal(
@@ -475,7 +475,7 @@ class PoissonMatrixFactorization(BayesianModel):
         L = len(weights_2.shape)
         trans = tuple(list(range(L-2)) + [L-1, L-2])
         weights_2 = tf.transpose(weights_2, trans)
-        rate = self.backward_function(
+        rate = self.decoder_function(
             tf.matmul(z, params['v'])) + weights_2*params['w']
         rate_shape = tf.shape(rate)[-2]
         new_shape = tf.unstack(tf.ones_like(tf.shape(rate)))
@@ -512,7 +512,7 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def project(self, x, threshold=1e-1):
         return tf.matmul(
-            self.forward_function(tf.cast(x, self.dtype)),
+            self.encoder_function(tf.cast(x, self.dtype)),
             tf.matmul(
                 tf.linalg.diag(
                     self.calibrated_expectations['s'],
@@ -525,7 +525,7 @@ class PoissonMatrixFactorization(BayesianModel):
     def encode(self, x):
         encoding = self.encoding_matrix()
         return tf.matmul(
-            self.forward_function(tf.cast(x, self.dtype)), encoding)
+            self.encoder_function(tf.cast(x, self.dtype)), encoding)
 
     def encoding_matrix(self):
         weights = self.calibrated_expectations['s']/tf.reduce_sum(
