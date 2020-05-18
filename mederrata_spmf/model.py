@@ -247,7 +247,7 @@ class BayesianModel(object):
             tf.cast(tf.math.reduce_variance(elpdi), dtype=tf.float64))
 
         return {
-            'waic': waic, 'se': se, 'lppd': lppd, 'pwaic': pwaic}
+            'waic': waic.numpy(), 'se': se.numpy(), 'lppd': lppd.numpy(), 'pwaic': pwaic.numpy()}
 
     def save(self, filename="model_save.pkl"):
         with open(filename, 'wb') as file:
