@@ -26,6 +26,18 @@ class BayesianModel(object):
 
     def __init__(self, data, data_transform_fn=None,
                  strategy=None, *args, **kwargs):
+        """Instatiate Model object based on tensorflow dataset
+
+        Arguments:
+            data {[type]} -- [description]
+
+        Keyword Arguments:
+            data_transform_fn {[type]} -- [description] (default: {None})
+            strategy {[type]} -- [description] (default: {None})
+
+        Raises:
+            AttributeError: [description]
+        """
         super(BayesianModel, self).__init__()
         if isinstance(
                 data, (np.ndarray, np.generic)) or isinstance(

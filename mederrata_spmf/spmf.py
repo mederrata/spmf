@@ -39,18 +39,38 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
-            auxiliary_horseshoe=True,
             u_tau_scale=1., s_tau_scale=1, symmetry_breaking_decay=0.5,
-            strategy=None, forward_function=None, backward_function=None,
+            strategy=None, encoder_function=None, decoder_function=None,
             scale_rates=False, with_s=True, with_w=True,
-            dtype=tf.float64, **kwargs):
+            auxiliary_horseshoe=True, dtype=tf.float64, **kwargs):
+        """Instantiate PMF object
+
+        Arguments:
+            data {[type]} -- [description]
+
+        Keyword Arguments:
+            data_transform_fn {[type]} -- Not currently used, but intended to allow for specification
+                of a preprocessing function (default: {None})
+            latent_dim {[type]} -- P (default: {None})
+            auxiliary_horseshoe {bool} -- IGamma/IGamma parameterization (default: {True})
+            u_tau_scale {[type]} -- Global shrinkage scale on u (default: {1.})
+            s_tau_scale {int} -- Global shrinkage scale on s (default: {1})
+            symmetry_breaking_decay {float} -- Decay factor along dimensions on u (default: {0.5})
+            strategy {[type]} -- For multi-GPU (default: {None})
+            decoder_function {[type]} -- f(x) (default: {None})
+            encoder_function {[type]} -- g(x) (default: {None})
+            scale_rates {bool} -- [description] (default: {False})
+            with_s {bool} -- [description] (default: {True})
+            with_w {bool} -- [description] (default: {True})
+            dtype {[type]} -- [description] (default: {tf.float64})
+        """
 
         super(PoissonMatrixFactorization, self).__init__(
             data, data_transform_fn, strategy=strategy, dtype=dtype)
-        if forward_function is not None:
-            self.encoder_function = forward_function
-        if backward_function is not None:
-            self.decoder_function = backward_function
+        if encoder_function is not None:
+            self.encoder_function = encoder_function
+        if decoder_function is not None:
+            self.decoder_function = decoder_function
         self.dtype = dtype
         self.symmetry_breaking_decay = symmetry_breaking_decay
         self.with_s = with_s
@@ -128,6 +148,11 @@ class PoissonMatrixFactorization(BayesianModel):
         return combined
 
     def create_distributions(self, auxiliary_horseshoe=True):
+        """Create distribution objects
+
+        Keyword Arguments:
+            auxiliary_horseshoe {bool} -- Use IGamma-IGamma for Cauchy? (default: {True})
+        """
         self.bijectors = {
             'u': tfb.Softplus(),
             'v': tfb.Softplus(),
