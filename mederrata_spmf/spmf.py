@@ -40,21 +40,26 @@ class PoissonMatrixFactorization(BayesianModel):
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
             auxiliary_horseshoe=True,
-            w_tau_scale=1., s_tau_scale=1, symmetry_breaking_decay=0.5,
-            strategy=None,
-            scale_rates=True, fix_s=False,
+            u_tau_scale=1., s_tau_scale=1, symmetry_breaking_decay=0.5,
+            strategy=None, forward_function=None, backward_function=None,
+            scale_rates=False, with_s=True, with_w=True,
             dtype=tf.float64, **kwargs):
 
         super(PoissonMatrixFactorization, self).__init__(
             data, data_transform_fn, strategy=strategy, dtype=dtype)
+        if forward_function is not None:
+            self.forward_function = forward_function
+        if backward_function is not None:
+            self.backward_function = backward_function
         self.dtype = dtype
         self.symmetry_breaking_decay = symmetry_breaking_decay
-        self.fix_s = fix_s
+        self.with_s = with_s
+        self.with_w = with_w
 
         record = next(iter(data))
         indices = record['indices']
         data = record['data']
-        self.norm_factor = 1
+        self.norm_factor = 1.
         if scale_rates:
             self.norm_factor = tf.reduce_mean(data).numpy()
         if 'normalization' in record.keys():
@@ -66,28 +71,25 @@ class PoissonMatrixFactorization(BayesianModel):
         self.latent_dim = self.feature_dim if (
             latent_dim) is None else latent_dim
 
-        self.w_tau_scale = w_tau_scale
+        self.u_tau_scale = u_tau_scale
         self.s_tau_scale = s_tau_scale
 
-        self.w0 = tf.constant(tf.eye(
+        self.u0 = 0.01*tf.constant(tf.eye(
             self.feature_dim, self.latent_dim, dtype=self.dtype
         )/np.sqrt(self.feature_dim))
-        self.u0 = tf.constant(tf.linalg.matrix_transpose(self.w0))
+        self.v0 = tf.constant(tf.linalg.matrix_transpose(self.u0))
         self.z0 = tf.constant(tf.matmul(
             self.forward_function(data),
-            self.w0))
-        self.x0 = tf.constant(tf.matmul(
-            self.z0,
-            self.u0
-        ))
-        self.s0 = tf.constant(
-            0.5*tf.ones((2, self.feature_dim), dtype=self.dtype))
+            self.u0))
+        if self.with_s:
+            self.s0 = tf.constant(
+                0.5*tf.ones((2, self.feature_dim), dtype=self.dtype))
         self.create_distributions(auxiliary_horseshoe=auxiliary_horseshoe)
         print(
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
 
     # @tf.function
-    def log_likelihood(self, s, w, u, q,  data=None, *args, **kwargs):
+    def log_likelihood(self, s, u, v, w,  data=None, *args, **kwargs):
         weights = s/tf.reduce_sum(s, axis=-2)[
             ..., tf.newaxis, :]
         weights_1 = tf.expand_dims(weights[..., 0, :], -1)
@@ -110,7 +112,7 @@ class PoissonMatrixFactorization(BayesianModel):
             L = len(weights_2.shape)
             trans = tuple(list(range(L-2)) + [L-1, L-2])
             weights_2 = tf.transpose(weights_2, trans)
-            rate = self.backward_function(tf.matmul(z_batch, u)) + weights_2*q
+            rate = self.backward_function(tf.matmul(z_batch, v)) + weights_2*q
             if 'normalization' in record.keys():
                 multiplier = record['normalization'][..., tf.newaxis]
                 for _ in range(len(rate.shape)-len(multiplier.shape)):
@@ -127,32 +129,32 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def create_distributions(self, auxiliary_horseshoe=True):
         self.bijectors = {
-            'w': tfb.Softplus(),
             'u': tfb.Softplus(),
-            'w_eta': tfb.Softplus(),
-            'w_tau': tfb.Softplus(),
+            'v': tfb.Softplus(),
+            'u_eta': tfb.Softplus(),
+            'u_tau': tfb.Softplus(),
             's': tfb.Softplus(),
             's_eta': tfb.Softplus(),
             's_tau': tfb.Softplus(),
-            'q': tfb.Softplus()
+            'w': tfb.Softplus()
         }
         symmetry_breaking_decay = self.symmetry_breaking_decay**tf.cast(
             tf.range(self.latent_dim), self.dtype)[tf.newaxis, ...]
 
         distribution_dict = {
-            'w': lambda w_eta, w_tau: tfd.Independent(
+            'u': lambda u_eta, u_tau: tfd.Independent(
                 tfd.HalfNormal(
-                    scale=w_eta*w_tau*symmetry_breaking_decay
+                    scale=u_eta*u_tau*symmetry_breaking_decay
                 ), reinterpreted_batch_ndims=2
             ),
-            'q': tfd.Independent(
+            'w': tfd.Independent(
                 tfd.HalfNormal(
                     scale=1000.*tf.ones(
                         (1, self.feature_dim), dtype=self.dtype)
                 ),
                 reinterpreted_batch_ndims=2
             ),
-            'w_eta': tfd.Independent(
+            'u_eta': tfd.Independent(
                 tfd.HalfCauchy(
                     loc=tf.zeros(
                         (self.feature_dim, self.latent_dim),
@@ -162,19 +164,19 @@ class PoissonMatrixFactorization(BayesianModel):
                         dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
             ),
-            'w_tau': tfd.Independent(
+            'u_tau': tfd.Independent(
                 tfd.HalfCauchy(
                     loc=tf.zeros(
                         (1, self.latent_dim),
                         dtype=self.dtype),
                     scale=tf.ones(
                         (1, self.latent_dim),
-                        dtype=self.dtype)*self.w_tau_scale
+                        dtype=self.dtype)*self.u_tau_scale
                 ), reinterpreted_batch_ndims=2
             ),
-            'u': tfd.Independent(
+            'v': tfd.Independent(
                 tfd.HalfNormal(
-                    scale=tf.ones_like(self.u0, dtype=self.dtype)
+                    scale=tf.ones_like(self.v0, dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
             ),
             's': lambda s_eta, s_tau: tfd.Independent(
@@ -202,22 +204,22 @@ class PoissonMatrixFactorization(BayesianModel):
         }
         if auxiliary_horseshoe:
 
-            self.bijectors['w_eta_a'] = tfb.Softplus()
-            self.bijectors['w_tau_a'] = tfb.Softplus()
+            self.bijectors['u_eta_a'] = tfb.Softplus()
+            self.bijectors['u_tau_a'] = tfb.Softplus()
 
             self.bijectors['s_eta_a'] = tfb.Softplus()
             self.bijectors['s_tau_a'] = tfb.Softplus()
 
-            distribution_dict['w_eta'] = lambda w_eta_a: tfd.Independent(
+            distribution_dict['u_eta'] = lambda u_eta_a: tfd.Independent(
                 SqrtInverseGamma(
                     concentration=0.5*tf.ones(
                         (self.feature_dim, self.latent_dim),
                         dtype=self.dtype
                     ),
-                    scale=1.0/w_eta_a
+                    scale=1.0/u_eta_a
                 ), reinterpreted_batch_ndims=2
             )
-            distribution_dict['w_eta_a'] = tfd.Independent(
+            distribution_dict['u_eta_a'] = tfd.Independent(
                 tfd.InverseGamma(
                     concentration=0.5*tf.ones(
                         (self.feature_dim, self.latent_dim),
@@ -228,23 +230,23 @@ class PoissonMatrixFactorization(BayesianModel):
                         dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
             )
-            distribution_dict['w_tau'] = lambda w_tau_a: tfd.Independent(
+            distribution_dict['u_tau'] = lambda u_tau_a: tfd.Independent(
                 SqrtInverseGamma(
                     concentration=0.5*tf.ones(
                         (1, self.latent_dim),
                         dtype=self.dtype
                     ),
-                    scale=1.0/w_tau_a
+                    scale=1.0/u_tau_a
                 ), reinterpreted_batch_ndims=2
             )
-            distribution_dict['w_tau_a'] = tfd.Independent(
+            distribution_dict['u_tau_a'] = tfd.Independent(
                 tfd.InverseGamma(
                     concentration=0.5*tf.ones(
                         (1, self.latent_dim), dtype=self.dtype
                     ),
                     scale=tf.ones(
                         (1, self.latent_dim), dtype=self.dtype
-                    )/self.w_tau_scale**2
+                    )/self.u_tau_scale**2
                 ), reinterpreted_batch_ndims=2
             )
 
@@ -286,7 +288,7 @@ class PoissonMatrixFactorization(BayesianModel):
         self.joint_prior = tfd.JointDistributionNamed(
             distribution_dict)
         surrogate_dict = {
-            'w': self.bijectors['w'](
+            'u': self.bijectors['u'](
                 build_trainable_normal_dist(
                     -5*tf.ones((self.feature_dim, self.latent_dim),
                                dtype=self.dtype),
@@ -296,7 +298,7 @@ class PoissonMatrixFactorization(BayesianModel):
                     strategy=self.strategy
                 )
             ),
-            'w_eta': self.bijectors['w_eta'](
+            'u_eta': self.bijectors['u_eta'](
                 build_trainable_InverseGamma_dist(
                     3*tf.ones(
                         (self.feature_dim, self.latent_dim), dtype=self.dtype),
@@ -306,7 +308,7 @@ class PoissonMatrixFactorization(BayesianModel):
                     strategy=self.strategy
                 )
             ),
-            'w_tau': self.bijectors['w_tau'](
+            'u_tau': self.bijectors['u_tau'](
                 build_trainable_InverseGamma_dist(
                     3*tf.ones(
                         (1, self.latent_dim),
@@ -316,15 +318,15 @@ class PoissonMatrixFactorization(BayesianModel):
                     strategy=self.strategy
                 )
             ),
-            'u': self.bijectors['u'](
+            'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    tf.convert_to_tensor(self.u0, dtype=self.dtype),
-                    1e-4*tf.ones_like(self.u0, dtype=self.dtype),
+                    tf.convert_to_tensor(self.v0, dtype=self.dtype),
+                    1e-4*tf.ones_like(self.v0, dtype=self.dtype),
                     2,
                     strategy=self.strategy
                 )
             ),
-            'q': self.bijectors['q'](
+            'w': self.bijectors['w'](
                 build_trainable_normal_dist(
                     -5*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     1e-4*tf.ones((1, self.feature_dim), dtype=self.dtype),
@@ -360,9 +362,9 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
         }
         if auxiliary_horseshoe:
-            self.bijectors['w_eta_a'] = tfb.Softplus()
-            self.bijectors['w_tau_a'] = tfb.Softplus()
-            surrogate_dict['w_eta_a'] = self.bijectors['w_eta_a'](
+            self.bijectors['u_eta_a'] = tfb.Softplus()
+            self.bijectors['u_tau_a'] = tfb.Softplus()
+            surrogate_dict['u_eta_a'] = self.bijectors['u_eta_a'](
                 build_trainable_InverseGamma_dist(
                     2.*tf.ones(
                         (self.feature_dim, self.latent_dim),
@@ -374,14 +376,14 @@ class PoissonMatrixFactorization(BayesianModel):
                     strategy=self.strategy
                 )
             )
-            surrogate_dict['w_tau_a'] = self.bijectors['w_tau_a'](
+            surrogate_dict['u_tau_a'] = self.bijectors['u_tau_a'](
                 build_trainable_InverseGamma_dist(
                     2.*tf.ones(
                         (1, self.latent_dim),
                         dtype=self.dtype),
                     tf.ones(
                         (1, self.latent_dim),
-                        dtype=self.dtype)/self.w_tau_scale**2,
+                        dtype=self.dtype)/self.u_tau_scale**2,
                     2,
                     strategy=self.strategy
                 )
@@ -420,11 +422,6 @@ class PoissonMatrixFactorization(BayesianModel):
         self.set_calibration_expectations()
 
     def unormalized_log_prob(self, data=None, **x):
-        """See if this works
-        This rewrites the value of z, setting it equal to x * w
-        Returns:
-            [type] -- [description]
-        """
         prob_parts = self.unormalized_log_prob_parts(
             data, **x)
         return tf.add_n(
@@ -463,7 +460,7 @@ class PoissonMatrixFactorization(BayesianModel):
         weights_1 = tf.expand_dims(weights[..., 0, :], -1)
         weights_2 = tf.expand_dims(weights[..., 1, :], -1)
 
-        encoding = weights_1*params['w']
+        encoding = weights_1*params['u']
         z = tf.matmul(
             self.forward_function(data),
             encoding)
@@ -479,7 +476,7 @@ class PoissonMatrixFactorization(BayesianModel):
         trans = tuple(list(range(L-2)) + [L-1, L-2])
         weights_2 = tf.transpose(weights_2, trans)
         rate = self.backward_function(
-            tf.matmul(z, params['u'])) + weights_2*params['q']
+            tf.matmul(z, params['v'])) + weights_2*params['w']
         rate_shape = tf.shape(rate)[-2]
         new_shape = tf.unstack(tf.ones_like(tf.shape(rate)))
         new_shape[-2] = rate_shape
@@ -519,7 +516,7 @@ class PoissonMatrixFactorization(BayesianModel):
             tf.matmul(
                 tf.linalg.diag(
                     self.calibrated_expectations['s'],
-                    self.calibrated_expectations['w']
+                    self.calibrated_expectations['u']
                 )
             )
         )
@@ -536,7 +533,7 @@ class PoissonMatrixFactorization(BayesianModel):
                 ..., tf.newaxis, :]
         weights_1 = tf.expand_dims(weights[..., 0, :], -1)
 
-        encoding = weights_1*self.calibrated_expectations['w']
+        encoding = weights_1*self.calibrated_expectations['u']
         return encoding
 
     def intercept_matrix(self):
@@ -547,10 +544,10 @@ class PoissonMatrixFactorization(BayesianModel):
         L = len(weights_2.shape)
         trans = tuple(list(range(L-2)) + [L-1, L-2])
         weights_2 = tf.transpose(weights_2, trans)
-        return weights_2*self.calibrated_expectations['q']
+        return weights_2*self.calibrated_expectations['w']
 
     def decode(self, z):
-        return tf.matmul(z, self.calibrated_expectations['u'])
+        return tf.matmul(z, self.calibrated_expectations['v'])
 
     @tf.function(autograph=False)
     def unormalized_log_prob_list(self, *x):
@@ -570,6 +567,10 @@ class PoissonMatrixFactorization(BayesianModel):
 
 
 class PoissonMatrixFactorizationNoS(PoissonMatrixFactorization):
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super(PoissonMatrixFactorizationNoS, self).__init__(*args, **kwargs)
         pass
-    pass
+    
+    def log_likelihood(self, w, u, q,  data=None, *args, **kwargs):
+        return super(PoissonMatrixFactorizationNoS, self).log_likelihood(
+            s, w, u, q,  data=None, *args, **kwargs)
