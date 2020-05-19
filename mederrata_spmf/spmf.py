@@ -39,7 +39,7 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
-            u_tau_scale=1., s_tau_scale=1, symmetry_breaking_decay=0.5,
+            u_tau_scale=1., s_tau_scale=.1, symmetry_breaking_decay=0.25,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_rates=True, with_s=True, with_w=True,
             auxiliary_horseshoe=True, dtype=tf.float64, **kwargs):
@@ -325,7 +325,7 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -5*tf.ones((self.feature_dim, self.latent_dim),
+                    -20.*tf.ones((self.feature_dim, self.latent_dim),
                                dtype=self.dtype),
                     1e-3*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
@@ -355,8 +355,8 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    tf.convert_to_tensor(self.v0, dtype=self.dtype),
-                    1e-4*tf.ones_like(self.v0, dtype=self.dtype),
+                    -20.*tf.ones_like(self.v0, dtype=self.dtype),
+                    1e-3*tf.ones_like(self.v0, dtype=self.dtype),
                     2,
                     strategy=self.strategy
                 )
@@ -365,8 +365,8 @@ class PoissonMatrixFactorization(BayesianModel):
         if self.with_w:
             surrogate_dict['w'] = self.bijectors['w'](
                 build_trainable_normal_dist(
-                    -5*tf.ones((1, self.feature_dim), dtype=self.dtype),
-                    1e-4*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    tf.zeros((1, self.feature_dim), dtype=self.dtype),
+                    1e-3*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
                 )
@@ -524,6 +524,8 @@ class PoissonMatrixFactorization(BayesianModel):
             multiplier = tf.reshape(multiplier, new_shape)
 
             rate *= tf.cast(multiplier, self.dtype)
+        
+        rate *= self.norm_factor
 
         rv_x = tfd.Independent(
             tfd.Poisson(
@@ -587,7 +589,7 @@ class PoissonMatrixFactorization(BayesianModel):
         L = len(weights_2.shape)
         trans = tuple(list(range(L-2)) + [L-1, L-2])
         weights_2 = tf.transpose(weights_2, trans)
-        return weights_2*self.calibrated_expectations['w']
+        return self.norm_factor*weights_2*self.calibrated_expectations['w']
 
     def decode(self, z):
         return tf.matmul(z, self.calibrated_expectations['v'])
