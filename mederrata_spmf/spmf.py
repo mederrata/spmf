@@ -30,7 +30,6 @@ class PoissonMatrixFactorization(BayesianModel):
     Arguments:
         object {[type]} -- [description]
     """
-    w0 = None
     bijectors = None
     var_list = []
     s_tau_scale = 1
@@ -39,7 +38,7 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
-            u_tau_scale=0.01, s_tau_scale=0.1, symmetry_breaking_decay=0.5,
+            u_tau_scale=0.01, s_tau_scale=0.1, symmetry_breaking_decay=0.99,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_rates=True, with_s=True, with_w=True,
             auxiliary_horseshoe=True, dtype=tf.float64, **kwargs):
@@ -95,16 +94,6 @@ class PoissonMatrixFactorization(BayesianModel):
         self.u_tau_scale = u_tau_scale
         self.s_tau_scale = s_tau_scale
 
-        self.u0 = 0.01*tf.constant(tf.eye(
-            self.feature_dim, self.latent_dim, dtype=self.dtype
-        )/np.sqrt(self.feature_dim))
-        self.v0 = tf.constant(tf.linalg.matrix_transpose(self.u0))
-        self.z0 = tf.constant(tf.matmul(
-            self.encoder_function(data),
-            self.u0))
-        if self.with_s:
-            self.s0 = tf.constant(
-                0.5*tf.ones((2, self.feature_dim), dtype=self.dtype))
         self.create_distributions(auxiliary_horseshoe=auxiliary_horseshoe)
         print(
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
@@ -211,7 +200,7 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': tfd.Independent(
                 tfd.HalfNormal(
-                    scale=0.5*tf.ones_like(self.v0, dtype=self.dtype)
+                    scale=0.5*tf.ones((self.latent_dim, self.feature_dim), dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
             ),
             's': lambda s_eta, s_tau: tfd.Independent(
@@ -356,8 +345,8 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -5.*tf.ones_like(self.v0, dtype=self.dtype),
-                    1e-2*tf.ones_like(self.v0, dtype=self.dtype),
+                    -5.*tf.ones((self.latent_dim, self.feature_dim), dtype=self.dtype),
+                    1e-2*tf.ones((self.latent_dim, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
                 )
