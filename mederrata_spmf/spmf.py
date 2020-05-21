@@ -38,23 +38,27 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
-            u_tau_scale=0.01, s_tau_scale=0.1, symmetry_breaking_decay=0.99,
+            u_tau_scale=0.01, s_tau_scale=0.01, symmetry_breaking_decay=0.99,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_rates=True, with_s=True, with_w=True,
             auxiliary_horseshoe=True, dtype=tf.float64, **kwargs):
         """Instantiate PMF object
 
         Arguments:
-            data {[type]} -- a BatchDataset object that we will iterate for training
+            data {[type]} -- a BatchDataset object that
+                             we will iterate for training
 
         Keyword Arguments:
-            data_transform_fn {[type]} -- Not currently used, but intended to allow for specification
+            data_transform_fn {[type]} -- Not currently used,
+                but intended to allow for specification
                 of a preprocessing function (default: {None})
             latent_dim {[type]} -- P (default: {None})
-            auxiliary_horseshoe {bool} -- IGamma/IGamma parameterization (default: {True})
+            auxiliary_horseshoe {bool} -- IGamma/IGamma parameterization
+                                            (default: {True})
             u_tau_scale {[type]} -- Global shrinkage scale on u (default: {1.})
             s_tau_scale {int} -- Global shrinkage scale on s (default: {1})
-            symmetry_breaking_decay {float} -- Decay factor along dimensions on u (default: {0.5})
+            symmetry_breaking_decay {float} -- Decay factor along dimensions
+                                                on u (default: {0.5})
             strategy {[type]} -- For multi-GPU (default: {None})
             decoder_function {[type]} -- f(x) (default: {None})
             encoder_function {[type]} -- g(x) (default: {None})
@@ -150,7 +154,8 @@ class PoissonMatrixFactorization(BayesianModel):
         """Create distribution objects
 
         Keyword Arguments:
-            auxiliary_horseshoe {bool} -- Use IGamma-IGamma for Cauchy? (default: {True})
+            auxiliary_horseshoe {bool} --
+                    Use IGamma-IGamma for Cauchy? (default: {True})
         """
         self.bijectors = {
             'u': tfb.Softplus(),
@@ -172,8 +177,10 @@ class PoissonMatrixFactorization(BayesianModel):
                 ), reinterpreted_batch_ndims=2
             ),
             'w': tfd.Independent(
-                tfd.HalfNormal(
-                    scale=100000.*tf.ones(
+                tfd.LogNormal(
+                    loc=tf.zeros(
+                        (1, self.feature_dim), dtype=self.dtype),
+                    scale=10.*tf.ones(
                         (1, self.feature_dim), dtype=self.dtype)
                 ),
                 reinterpreted_batch_ndims=2
@@ -200,7 +207,9 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': tfd.Independent(
                 tfd.HalfNormal(
-                    scale=0.5*tf.ones((self.latent_dim, self.feature_dim), dtype=self.dtype)
+                    scale=0.5 *
+                    tf.ones((self.latent_dim, self.feature_dim),
+                            dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
             ),
             's': lambda s_eta, s_tau: tfd.Independent(
@@ -316,7 +325,7 @@ class PoissonMatrixFactorization(BayesianModel):
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
                     -5.*tf.ones((self.feature_dim, self.latent_dim),
-                               dtype=self.dtype),
+                                dtype=self.dtype),
                     1e-2*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
                     2,
@@ -345,8 +354,10 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -5.*tf.ones((self.latent_dim, self.feature_dim), dtype=self.dtype),
-                    1e-2*tf.ones((self.latent_dim, self.feature_dim), dtype=self.dtype),
+                    -5.*tf.ones((self.latent_dim, self.feature_dim),
+                                dtype=self.dtype),
+                    1e-2*tf.ones((self.latent_dim, self.feature_dim),
+                                 dtype=self.dtype),
                     2,
                     strategy=self.strategy
                 )
@@ -515,7 +526,7 @@ class PoissonMatrixFactorization(BayesianModel):
             multiplier = tf.reshape(multiplier, new_shape)
 
             rate *= tf.cast(multiplier, self.dtype)
-        
+
         rate *= self.norm_factor
 
         rv_x = tfd.Independent(
