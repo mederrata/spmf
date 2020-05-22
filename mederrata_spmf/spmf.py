@@ -230,7 +230,7 @@ class PoissonMatrixFactorization(BayesianModel):
                                   dtype=self.dtype)*self.s_tau_scale
                 ), reinterpreted_batch_ndims=2
             )
-    
+
         self.bijectors['u_eta_a'] = tfb.Softplus()
         self.bijectors['u_tau_a'] = tfb.Softplus()
         if self.with_s:
@@ -318,9 +318,9 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -5.*tf.ones((self.feature_dim, self.latent_dim),
-                                dtype=self.dtype),
-                    1e-2*tf.ones((self.feature_dim, self.latent_dim),
+                    -10.*tf.ones((self.feature_dim, self.latent_dim),
+                                 dtype=self.dtype),
+                    1e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
                     2,
                     strategy=self.strategy
@@ -348,9 +348,9 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -5.*tf.ones((self.latent_dim, self.feature_dim),
-                                dtype=self.dtype),
-                    1e-2*tf.ones((self.latent_dim, self.feature_dim),
+                    -10.*tf.ones((self.latent_dim, self.feature_dim),
+                                 dtype=self.dtype),
+                    1e-4*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
                     2,
                     strategy=self.strategy
