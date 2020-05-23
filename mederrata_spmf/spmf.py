@@ -38,7 +38,7 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
-            u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.99,
+            u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_rates=True, with_s=True, with_w=True,
             dtype=tf.float64, **kwargs):
