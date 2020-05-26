@@ -32,22 +32,13 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        'boto3',
-        'datashader>=0.9.0',
         'dill>=0.3.1.1',
-        'enum34;python_version<"3.4"',  # TODO: check if it removes enum34
-        'gpustat',
-        'importlib_resources;python_version<"3.7"',  # Standard Library 3.7+
-        'jax>=0.1.5',
         'matplotlib>=3.1',
-        'notebook>=6.0.0',
         'numpy>=1.17',
         'pandas>=0.3',
         'scipy==1.4.1',  # Tensorfow 2.1 depends
-        'SQLAlchemy>=1.3.12',
         'tensorflow>=2.2.0rc1, < 2.3.0',
         'tensorflow-probability>=0.9',
-        'tensorflow-addons>=0.7.1',
-        'umap-learn>=0.3.10'
-    ]
+        'tensorflow-addons>=0.7.1'
+        ]
 )

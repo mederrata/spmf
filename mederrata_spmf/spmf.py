@@ -562,7 +562,9 @@ class PoissonMatrixFactorization(BayesianModel):
     def encode(self, x):
         encoding = self.encoding_matrix()
         return tf.matmul(
-            self.encoder_function(tf.cast(x, self.dtype)), encoding)
+            self.encoder_function(
+                tf.cast(x, self.dtype)
+                ), encoding)
 
     def encoding_matrix(self):
         if not self.with_s:
