@@ -30,6 +30,9 @@ setuptools.setup(
         "License :: Closed",
         "Operating System :: Linux",
     ],
+    scripts=[
+        "bin/factorize_csv.py"
+    ],
     python_requires='>=3.6',
     install_requires=[
         'dill>=0.3.1.1',
