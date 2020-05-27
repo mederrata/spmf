@@ -109,5 +109,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.argv += ["-f /Users/josh/Downloads/test.csv"]
     main()
