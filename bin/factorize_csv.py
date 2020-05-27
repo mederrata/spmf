@@ -40,14 +40,15 @@ def main():
     )
 
     args = parser.parse_args(sys.argv[1:])
-    if not os.path.exists(args.csv_file):
-        _FILENAME = "/Users/josh/Downloads/test.csv"
-        #sys.exit("File doesn't exist")\
+    if args.csv_file is None:
+        sys.exit("You need to specify a csv file")
+    elif not os.path.exists(args.csv_file):
+        sys.exit("File doesn't exist")
     else:
         _FILENAME = args.csv_file
 
     _BATCH_SIZE = args.batch_size
-    
+
     _EPOCH_NUMBER = args.epoch
     _DIMENSION = args.dimension
     _LEARNING_RATE = args.learning_rate
