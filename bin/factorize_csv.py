@@ -63,7 +63,7 @@ def main():
     csv_data = csv_data.map(
         lambda j, *x: {'indices': j, 'data': tf.squeeze(tf.stack(x, axis=-1))})
 
-    csv_data_batched = csv_data.batch(_BATCH_SIZE)
+    csv_data_batched = csv_data.batch(_BATCH_SIZE, drop_remainder=True)
 
     factor = PoissonMatrixFactorization(
         csv_data_batched, latent_dim=_DIMENSION, strategy=None,
@@ -83,7 +83,6 @@ def main():
     with open(filename, "w") as f:
         writer = csv.writer(f)
         encoding = factor.encoding_matrix().numpy().T
-        writer.writerow(vocab)
         for row in range(encoding.shape[0]):
             writer.writerow(encoding[row, :])
 
@@ -105,7 +104,7 @@ def main():
     ax[1].set_title("65% and 95% CI")
     ax[1].axvline(1.0, linestyle='dashed', color="black")
     plt.savefig(f"{_FILENAME}_{_DIMENSION}D_encoding.pdf", bbox_inches='tight')
-    plt.show()
+    # plt.show()
 
 
 if __name__ == "__main__":
