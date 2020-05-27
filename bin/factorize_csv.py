@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sys
 import argparse
 import csv
 import itertools
@@ -40,10 +41,13 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
     if not os.path.exists(args.csv_file):
-        os.exit("File doesn't exit")
+        _FILENAME = "/Users/josh/Downloads/test.csv"
+        #sys.exit("File doesn't exist")\
+    else:
+        _FILENAME = args.csv_file
 
     _BATCH_SIZE = args.batch_size
-    _FILENAME = args.csv_file
+    
     _EPOCH_NUMBER = args.epoch
     _DIMENSION = args.dimension
     _LEARNING_RATE = args.learning_rate
@@ -57,7 +61,7 @@ def main():
     csv_data = tf.data.experimental.CsvDataset(_FILENAME, [tf.float64]*columns)
     csv_data = csv_data.enumerate()
     csv_data = csv_data.map(
-        lambda j, *x: {'indicies': j, 'data': tf.stack(x, axis=-1)})
+        lambda j, *x: {'indices': j, 'data': tf.squeeze(tf.stack(x, axis=-1))})
 
     csv_data_batched = csv_data.batch(_BATCH_SIZE)
 
@@ -105,4 +109,5 @@ def main():
 
 
 if __name__ == "__main__":
+    sys.argv += ["-f /Users/josh/Downloads/test.csv"]
     main()
