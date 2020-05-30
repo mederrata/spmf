@@ -173,7 +173,7 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'w': tfd.Independent(
                 tfd.HalfNormal(
-                    scale=100.*tf.ones(
+                    scale=10.*tf.ones(
                         (1, self.feature_dim), dtype=self.dtype)
                 ),
                 reinterpreted_batch_ndims=2
@@ -358,7 +358,7 @@ class PoissonMatrixFactorization(BayesianModel):
         if self.with_w:
             surrogate_dict['w'] = self.bijectors['w'](
                 build_trainable_normal_dist(
-                    -1.*tf.zeros((1, self.feature_dim), dtype=self.dtype),
+                    tf.ones((1, self.feature_dim), dtype=self.dtype),
                     1e-2*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
@@ -385,7 +385,7 @@ class PoissonMatrixFactorization(BayesianModel):
                 build_trainable_normal_dist(
                     tf.ones(
                         (2, self.feature_dim), dtype=self.dtype)*tf.cast(
-                            [[-1.1], [-1.]], dtype=self.dtype),
+                            [[-3.], [-1.]], dtype=self.dtype),
                     1e-3*tf.ones(
                         (2, self.feature_dim), dtype=self.dtype),
                     2,
