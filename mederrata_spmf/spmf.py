@@ -385,10 +385,10 @@ class PoissonMatrixFactorization(BayesianModel):
             )
             surrogate_dict['s'] = self.bijectors['s'](
                 build_trainable_normal_dist(
-                    -0.5*tf.ones(
+                    tf.ones(
                         (2, self.feature_dim), dtype=self.dtype)*tf.cast(
-                            [[.1], [1.]], dtype=self.dtype),
-                    1e-2*tf.ones(
+                            [[-1.1], [-1.]], dtype=self.dtype),
+                    1e-3*tf.ones(
                         (2, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
@@ -609,6 +609,9 @@ class PoissonMatrixFactorization(BayesianModel):
             self.surrogate_distribution.trainable_variables[j].assign(
                 tf.cast(value, self.dtype))
         #  self.set_calibration_expectations()
+
+    def sparsify(self):
+        pass
 
 
 class PoissonMatrixFactorizationNoS(PoissonMatrixFactorization):
