@@ -172,10 +172,8 @@ class PoissonMatrixFactorization(BayesianModel):
                 ), reinterpreted_batch_ndims=2
             ),
             'w': tfd.Independent(
-                tfd.LogNormal(
-                    loc=tf.zeros(
-                        (1, self.feature_dim), dtype=self.dtype),
-                    scale=10.*tf.ones(
+                tfd.HalfNormal(
+                    scale=100.*tf.ones(
                         (1, self.feature_dim), dtype=self.dtype)
                 ),
                 reinterpreted_batch_ndims=2
