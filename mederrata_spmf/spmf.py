@@ -317,7 +317,7 @@ class PoissonMatrixFactorization(BayesianModel):
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
                     -self.feature_dim/20.*tf.ones((self.feature_dim, self.latent_dim),
-                                 dtype=self.dtype), #*symmetry_breaking_decay,
+                                 dtype=self.dtype)/symmetry_breaking_decay,
                     1e-3*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
                     2,

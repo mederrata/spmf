@@ -404,7 +404,8 @@ def auto_minimize(loss_fn,
                 """Check for convergence
                 """
                 if not np.isfinite(loss):
-                    raise ArithmeticError("We are NaN")
+                    checkpoint.restore(manager.latest_checkpoint)
+                    raise ArithmeticError("We are NaN, restored the last checkpoint")
 
                 """Check for plateau
                 """
