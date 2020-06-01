@@ -316,7 +316,7 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -10.*tf.ones((self.feature_dim, self.latent_dim),
+                    -20.*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
                     1e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
@@ -346,7 +346,7 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -10.*tf.ones((self.latent_dim, self.feature_dim),
+                    -20.*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
                     1e-4*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
@@ -616,8 +616,8 @@ class PoissonMatrixFactorizationNoS(PoissonMatrixFactorization):
     def __init__(self, **kwargs):
         super(PoissonMatrixFactorizationNoS, self).__init__(
             with_s=False, **kwargs)
-        pass
 
-    def log_likelihood(self, w, u, q,  data=None, *args, **kwargs):
+    def log_likelihood(self, u, v, w,  data=None, *args, **kwargs):
+        s = tf.ones_like(w)
         return super(PoissonMatrixFactorizationNoS, self).log_likelihood(
             s, w, u, q,  data=None, *args, **kwargs)
