@@ -358,7 +358,7 @@ class PoissonMatrixFactorization(BayesianModel):
         if self.with_w:
             surrogate_dict['w'] = self.bijectors['w'](
                 build_trainable_normal_dist(
-                    tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    -1.*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     1e-2*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
