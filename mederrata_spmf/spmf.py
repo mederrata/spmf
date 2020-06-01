@@ -33,8 +33,8 @@ class PoissonMatrixFactorization(BayesianModel):
     bijectors = None
     var_list = []
     s_tau_scale = 1
-    def encoder_function(self, x): return tf.math.log(x+1.)
-    def decoder_function(self, x): return tf.math.exp(x) - 1.
+    def encoder_function(self, x): return x/self.norm_factor
+    def decoder_function(self, x): return x*self.norm_factor
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
@@ -316,7 +316,7 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -24.*tf.ones((self.feature_dim, self.latent_dim),
+                    -10.*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
                     1e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
@@ -346,7 +346,7 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -24.*tf.ones((self.latent_dim, self.feature_dim),
+                    -10.*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
                     1e-4*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
