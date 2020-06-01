@@ -316,9 +316,9 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -self.feature_dim/50.*tf.ones((self.feature_dim, self.latent_dim),
-                                                  dtype=self.dtype),
-                    1e-3*tf.ones((self.feature_dim, self.latent_dim),
+                    -self.feature_dim/20.*tf.ones((self.feature_dim, self.latent_dim),
+                                 dtype=self.dtype),
+                    1e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
                     2,
                     strategy=self.strategy
@@ -346,9 +346,9 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -self.feature_dim/50.*tf.ones((self.latent_dim, self.feature_dim),
-                                                  dtype=self.dtype),
-                    1e-3*tf.ones((self.latent_dim, self.feature_dim),
+                    -self.feature_dim/20.*tf.ones((self.latent_dim, self.feature_dim),
+                                 dtype=self.dtype),
+                    1e-4*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
                     2,
                     strategy=self.strategy
@@ -358,7 +358,7 @@ class PoissonMatrixFactorization(BayesianModel):
         if self.with_w:
             surrogate_dict['w'] = self.bijectors['w'](
                 build_trainable_normal_dist(
-                    0.5*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    tf.ones((1, self.feature_dim), dtype=self.dtype),
                     1e-2*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
@@ -562,7 +562,7 @@ class PoissonMatrixFactorization(BayesianModel):
         return tf.matmul(
             self.encoder_function(
                 tf.cast(x, self.dtype)
-            ), encoding)
+                ), encoding)
 
     def encoding_matrix(self):
         if not self.with_s:
