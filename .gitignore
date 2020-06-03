@@ -129,3 +129,6 @@ dmypy.json
 .pyre/
 .vscode
 .tf_ckpts
+
+#scanpy cache directory
+/cache
