@@ -35,8 +35,8 @@ def main():
     )
 
     parser.add_argument(
-        '-lr', '--learning-rate', nargs='?', type=float, default=0.1,
-        help='Enter float. Default: 0.1'
+        '-lr', '--learning-rate', nargs='?', type=float, default=0.05,
+        help='Enter float. Default: 0.05'
     )
 
     args = parser.parse_args(sys.argv[1:])
@@ -91,12 +91,12 @@ def main():
     D = factor.feature_dim
     pcm = ax[0].imshow(factor.encoding_matrix().numpy()
                        [::-1, :], vmin=0, cmap="Blues")
-    ax[0].set_yticks(np.arange(D))
-    ax[0].set_yticklabels(np.arange(D))
+    ax[0].set_yticks(np.arange(_DIMENSION))
+    ax[0].set_yticklabels(np.arange(_DIMENSION))
     ax[0].set_ylabel("item")
     ax[0].set_xlabel("factor dimension")
-    ax[0].set_xticks(np.arange(P))
-    ax[0].set_xticklabels(np.arange(P))
+    ax[0].set_xticks(np.arange(_DIMENSION))
+    ax[0].set_xticklabels(np.arange(_DIMENSION))
 
     fig.colorbar(pcm, ax=ax[0], orientation="vertical")
     az.plot_forest(intercept_data, ax=ax[1])
