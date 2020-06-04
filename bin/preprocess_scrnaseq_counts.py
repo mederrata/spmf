@@ -43,6 +43,7 @@ adata = adata[adata.obs.n_genes_by_counts < 2500, :]
 adata = adata[adata.obs.pct_counts_mt < 5, :]
 
 #drop cells manually before computing hvg's or else some cells end up with all zero counts.
+sc.pp.filter_genes(adata, min_cells=3)
 
 #raw counts
 X = adata.X.todense()
@@ -51,19 +52,24 @@ X = adata.X.todense()
 sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 # sc.pp.highly_variable_genes(adata,n_top_genes=n_top_genes)
-sc.pp.highly_variable_genes(adata, min_mean=0.25, max_mean=5, min_disp=1.5)
-# sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
+# sc.pp.highly_variable_genes(adata, min_mean=0.25, max_mean=5, min_disp=1.5)
+sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
 # sc.pl.highly_variable_genes(adata)
 hvgix = adata.var.highly_variable
+
 disp_norm = adata.var.dispersions_norm
 disp_norm.index=np.arange(len(disp_norm))
 disp_norm_sorted=disp_norm.sort_values(ascending=False)
 dispix = disp_norm_sorted.index
 all_gene_names=adata.var_names
-all_gene_names_sorted=all_gene_names[dispix]
+
+# #order: hvgix, then remaining sorted by disp
+# hvgix=hvgix[dispix]
+# newix=pd.concat(disp_norm_sorted.index[hvgix==True], disp_norm_sorted.index[hvgix==False])
 
 #sort the whole matrix by normalized dispersion, then select desired number
 X = X[:,dispix]
+all_gene_names_sorted=all_gene_names[dispix]
 
 #save the counts and gene names 
 np.save(datapath+savefile_counts, X)
