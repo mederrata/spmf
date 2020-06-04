@@ -42,7 +42,7 @@ class PoissonMatrixFactorization(BayesianModel):
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, column_norms=None,
-            with_s=False, with_w=True,
+            with_s=True, with_w=True,
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
 
