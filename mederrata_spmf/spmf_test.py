@@ -10,10 +10,13 @@ import matplotlib.pyplot as plt
 
 def main():
     N = 50000
+    D = 30
+    P = 4
+
     # Test taking in from tf.dataset, don't pre-batch
     data = tf.data.Dataset.from_tensor_slices(
         {
-            'data': np.random.poisson(3.0, size=(N, 20)),
+            'data': np.random.poisson(1.0, size=(N, D)),
             'indices': np.arange(N),
             'normalization': np.ones(N)
         })
@@ -22,7 +25,7 @@ def main():
     # strategy = tf.distribute.MirroredStrategy()
     strategy = None
     factor = PoissonMatrixFactorization(
-        data, latent_dim=5, strategy=strategy,
+        data, latent_dim=P, strategy=strategy, with_s=True,
         dtype=tf.float64)
     # Test to make sure sampling works
     sample = factor.joint_prior.sample()
@@ -35,14 +38,14 @@ def main():
         **sample_surrogate,  data=next(iter(data)))
 
     losses = factor.calibrate_advi(
-        num_epochs=10, rel_tol=1e-4, learning_rate=.1)
+        num_epochs=50, rel_tol=1e-4, learning_rate=.1)
 
     waic = factor.waic()
     print(waic)
 
-    plt.imshow(factor.encoding_matrix(), vmin=0)
+    plt.imshow(factor.encoding_matrix().numpy(), cmap="Greens", vmin=0)
     plt.show()
-    plt.imshow(factor.intercept_matrix(), vmin=0)
+    plt.imshow(factor.intercept_matrix().numpy(), cmap="Greens", vmin=0)
     plt.show()
 
 
