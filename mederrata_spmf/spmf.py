@@ -41,7 +41,8 @@ class PoissonMatrixFactorization(BayesianModel):
             self, data, data_transform_fn=None, latent_dim=None,
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
-            scale_rates=True, with_s=False, with_w=True,
+            scale_columns=True, column_norms=None,
+            with_s=False, with_w=True,
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
 
@@ -61,7 +62,7 @@ class PoissonMatrixFactorization(BayesianModel):
             strategy {[type]} -- For multi-GPU (default: {None})
             decoder_function {[type]} -- f(x) (default: {None})
             encoder_function {[type]} -- g(x) (default: {None})
-            scale_rates {bool} -- Scale the rates by the mean (default: {True})
+            scale_coliumns {bool} -- Scale the rates by the mean of the first batch (default: {True})
             with_s {bool} -- [description] (default: {True})
             with_w {bool} -- [description] (default: {True})
             dtype {[type]} -- [description] (default: {tf.float64})
@@ -88,15 +89,19 @@ class PoissonMatrixFactorization(BayesianModel):
         indices = record['indices']
         data = record['data']
         self.column_norm_factor = 1.
-        if scale_rates:
-            self.column_norm_factor = tf.reduce_mean(
-                tf.cast(data, self.dtype), axis=0, keepdims=True)
+
+        if scale_columns:
+            if column_norms is not None:
+                self.column_norm_factor = tf.cast(
+                    column_norms, self.dtype)
+            else:
+                self.column_norm_factor = tf.reduce_mean(
+                    tf.cast(data, self.dtype), axis=0, keepdims=True)
+
         if 'normalization' in record.keys():
             norm = record['normalization']
         data = tf.cast(data, self.dtype)
         self.feature_dim = data.shape[-1]
-        self.scale_rates = scale_rates
-
         self.latent_dim = self.feature_dim if (
             latent_dim) is None else latent_dim
 
@@ -362,7 +367,7 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -0.5*self.feature_dim*tf.ones((self.feature_dim, self.latent_dim),
+                    -30*tf.ones((self.feature_dim, self.latent_dim),
                                                   dtype=self.dtype),
                     5e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
@@ -392,8 +397,9 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -0.5*self.feature_dim*tf.ones((self.latent_dim, self.feature_dim),
-                                                  dtype=self.dtype),
+                    -30*tf.ones(
+                        (self.latent_dim, self.feature_dim),
+                        dtype=self.dtype),
                     5e-4*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
                     2,
@@ -498,11 +504,12 @@ class PoissonMatrixFactorization(BayesianModel):
 
         self.set_calibration_expectations()
 
-    def unormalized_log_prob(self, data=None, **x):
+    def unormalized_log_prob(self, data=None, **params):
         prob_parts = self.unormalized_log_prob_parts(
-            data, **x)
-        return tf.add_n(
+            data, **params)
+        value = tf.add_n(
             list(prob_parts.values()))
+        return value
 
     def unormalized_log_prob_parts(self, data=None, **params):
         """Energy function
