@@ -233,23 +233,23 @@ def minimize_distributed(
         return losses
 
 
-def auto_minimize(loss_fn,
-                  num_epochs=1000,
-                  max_decay_steps=25,
-                  abs_tol=1e-4,
-                  rel_tol=1e-4,
-                  trainable_variables=None,
-                  trace_fn=_trace_loss,
-                  learning_rate=1.,
-                  check_every=25,
-                  decay_rate=0.95,
-                  checkpoint_name='chkpt',
-                  max_initialization_steps=1000,
-                  tf_dataset=None,
-                  processing_fn=None,
-                  name='minimize',
-                  clip_value=10.,
-                  **kwargs):
+def batched_minimize(loss_fn,
+                     num_epochs=1000,
+                     max_decay_steps=25,
+                     abs_tol=1e-4,
+                     rel_tol=1e-4,
+                     trainable_variables=None,
+                     trace_fn=_trace_loss,
+                     learning_rate=1.,
+                     check_every=25,
+                     decay_rate=0.95,
+                     checkpoint_name='chkpt',
+                     max_initialization_steps=1000,
+                     tf_dataset=None,
+                     processing_fn=None,
+                     name='minimize',
+                     clip_value=10.,
+                     **kwargs):
 
     learning_rate = 1.0 if learning_rate is None else learning_rate
 
@@ -405,7 +405,10 @@ def auto_minimize(loss_fn,
                 """
                 if not np.isfinite(loss):
                     checkpoint.restore(manager.latest_checkpoint)
-                    raise ArithmeticError("We are NaN, restored the last checkpoint")
+                    #raise ArithmeticError(
+                    #    "We are NaN, restored the last checkpoint")
+                    print("Got NaN, restoring a checkpoint")
+                    decay_step += 1
 
                 """Check for plateau
                 """
@@ -781,6 +784,7 @@ def fit_surrogate_posterior(target_log_prob_fn,
                             decay_rate=0.9,
                             learning_rate=1.0,
                             max_decay_steps=25,
+                            clip_value=10.,
                             trainable_variables=None,
                             seed=None,
                             abs_tol=None,
@@ -812,18 +816,19 @@ def fit_surrogate_posterior(target_log_prob_fn,
             name=name,
             **kwargs)
     if strategy is None:
-        return auto_minimize(complete_variational_loss_fn,
-                             num_epochs=num_epochs,
-                             max_decay_steps=max_decay_steps,
-                             trace_fn=trace_fn,
-                             learning_rate=learning_rate,
-                             trainable_variables=trainable_variables,
-                             abs_tol=abs_tol,
-                             rel_tol=rel_tol,
-                             decay_rate=decay_rate,
-                             tf_dataset=tf_dataset,
-                             check_every=check_every,
-                             **kwargs)
+        return batched_minimize(complete_variational_loss_fn,
+                                num_epochs=num_epochs,
+                                max_decay_steps=max_decay_steps,
+                                trace_fn=trace_fn,
+                                learning_rate=learning_rate,
+                                trainable_variables=trainable_variables,
+                                abs_tol=abs_tol,
+                                rel_tol=rel_tol,
+                                clip_value=clip_value,
+                                decay_rate=decay_rate,
+                                tf_dataset=tf_dataset,
+                                check_every=check_every,
+                                **kwargs)
     else:
         return minimize_distributed(
             complete_variational_loss_fn,
