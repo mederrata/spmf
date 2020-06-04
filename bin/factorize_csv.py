@@ -68,9 +68,8 @@ def main():
 
     factor = PoissonMatrixFactorization(
         csv_data_batched, latent_dim=_DIMENSION, strategy=None,
-        encoder_function=lambda x: x, decoder_function=lambda x: x,
         scale_rates=True,
-        u_tau_scale=1.0/_DIMENSION/columns/np.sqrt(N),
+        u_tau_scale=1.0/np.sqrt(columns*N),
         dtype=tf.float64)
 
     factor.calibrate_advi(
@@ -89,8 +88,9 @@ def main():
 
     fig, ax = plt.subplots(1, 2, figsize=(14, 8))
     D = factor.feature_dim
-    pcm = ax[0].imshow(factor.encoding_matrix().numpy()
-                       [::-1, :], vmin=0, cmap="Blues")
+    pcm = ax[0].imshow(
+        factor.encoding_matrix().numpy()[::-1, :],
+        vmin=0, cmap="Blues")
     ax[0].set_yticks(np.arange(_DIMENSION))
     ax[0].set_yticklabels(np.arange(_DIMENSION))
     ax[0].set_ylabel("item")
