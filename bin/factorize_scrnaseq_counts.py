@@ -2,6 +2,10 @@
 # TODO: create X for scRNAseq examples {small easy, medium (preselect HVGs), and full genome}
 # TODO: plot scatter of latent vars (like UMAP??)
 # TODO: output plot of top20 features per latent loading???
+import sys
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import scanpy as sc  # for interface to single cell stuff
 from mederrata_spmf import PoissonMatrixFactorization
 import matplotlib.font_manager as fm
@@ -12,9 +16,6 @@ import tensorflow_probability as tfp
 import tensorflow as tf
 import pandas as pd
 import numpy as np
-import sys
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 rcParams['font.family'] = 'sans-serif'
@@ -29,9 +30,9 @@ gene_names = np.load(datapath + dataset_name +
                      '_genenames.npy', allow_pickle=True)
 UMAP = np.load(datapath + dataset_name + '_UMAP.npy')
 
-P = 3
-D = 300
-N_BATCHES = 4
+P = 10
+D = X.shape[1]
+N_BATCHES = 6
 BATCH_SIZE = int(np.floor(X.shape[0]/N_BATCHES))
 
 # normalization for cells, computed using all genes
@@ -68,7 +69,7 @@ data = tf.data.Dataset.from_tensor_slices(
         'normalization': norm_vals
     })
 
-# data = data.shuffle(buffer_size=N+1)
+data = data.shuffle(buffer_size=N)
 data = data.batch(BATCH_SIZE, drop_remainder=True)
 
 # strategy = tf.distribute.MirroredStrategy()
@@ -82,7 +83,7 @@ factor = PoissonMatrixFactorization(
     dtype=tf.float64)
 
 losses = factor.calibrate_advi(
-    num_epochs=50, learning_rate=.1)
+    num_epochs=200, learning_rate=0.025)
 
 waic = factor.waic()
 print(waic)
@@ -101,11 +102,11 @@ topix = range(min(len(gene_names), 20))
 # topix=range(topD)
 
 # try to extract the topD features loaded onto each latent dimension for a plot
-# topD=5
-# topix=[]
-# for d in range(P):
-#     thisix=np.argsort(encoding_matrix[:,d])[::-1][:topD]
-#     topix+=thisix.tolist()
+topD=5
+topix=[]
+for d in range(P):
+    thisix=np.argsort(encoding_matrix[:,d])[::-1][:topD]
+    topix+=thisix.tolist()
 
 
 fig, ax = plt.subplots(1, 2, figsize=(14, 8))
