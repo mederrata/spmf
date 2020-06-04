@@ -496,7 +496,6 @@ class PoissonMatrixFactorization(BayesianModel):
 
         self.var_list = list(surrogate_dict.keys())
 
-        self.surrogate_sample = self.surrogate_distribution.sample(2000)
         self.set_calibration_expectations()
 
     def unormalized_log_prob(self, data=None, **x):
