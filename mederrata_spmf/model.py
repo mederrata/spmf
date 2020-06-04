@@ -79,7 +79,7 @@ class BayesianModel(object):
     def calibrate_advi(
             self, num_epochs=100, learning_rate=0.1,
             opt=None, abs_tol=1e-10, rel_tol=1e-8,
-            clip_value=10.,
+            clip_value=10., max_decay_steps=25,
             check_every=25, set_expectations=True, sample_size=4,
             **kwargs):
 
@@ -90,6 +90,7 @@ class BayesianModel(object):
                 num_epochs=num_epochs,
                 sample_size=sample_size,
                 learning_rate=learning_rate,
+                max_decay_steps=max_decay_steps,
                 abs_tol=abs_tol,
                 rel_tol=rel_tol,
                 clip_value=clip_value,
