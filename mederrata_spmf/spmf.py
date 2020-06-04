@@ -367,7 +367,7 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -0.5*self.feature_dim*tf.ones((self.feature_dim, self.latent_dim),
+                    -30*tf.ones((self.feature_dim, self.latent_dim),
                                                   dtype=self.dtype),
                     5e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
@@ -397,8 +397,9 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -0.5*self.feature_dim*tf.ones((self.latent_dim, self.feature_dim),
-                                                  dtype=self.dtype),
+                    -30*tf.ones(
+                        (self.latent_dim, self.feature_dim),
+                        dtype=self.dtype),
                     5e-4*tf.ones((self.latent_dim, self.feature_dim),
                                  dtype=self.dtype),
                     2,
@@ -503,11 +504,12 @@ class PoissonMatrixFactorization(BayesianModel):
 
         self.set_calibration_expectations()
 
-    def unormalized_log_prob(self, data=None, **x):
+    def unormalized_log_prob(self, data=None, **params):
         prob_parts = self.unormalized_log_prob_parts(
-            data, **x)
-        return tf.add_n(
+            data, **params)
+        value = tf.add_n(
             list(prob_parts.values()))
+        return value
 
     def unormalized_log_prob_parts(self, data=None, **params):
         """Energy function
