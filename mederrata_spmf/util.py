@@ -266,7 +266,7 @@ def batched_minimize(loss_fn,
     # )
     opt = tfa.optimizers.Lookahead(optimizer)
 
-    @tf.function
+    # @tf.function
     def batch_normalized_loss(data):
         N = tf.shape(tf.nest.flatten(data)[0])[0]
         loss = loss_fn(data=data)
@@ -381,23 +381,30 @@ def batched_minimize(loss_fn,
                     train_loop_body(state_initializer, step)
                 ]
             else:
-                batch_loss = []
+                batch_losses = []
                 for data in tf_dataset:
                     if processing_fn is not None:
                         data = processing_fn(data)
-                    batch_loss += [
-                        train_loop_body(
+                    batch_loss = train_loop_body(
                             state_initializer, step, data
-                        )]
-                    # print(batch_loss)
+                        )
+                    if not np.isfinite(batch_loss.numpy()):
+                        checkpoint.restore(manager.latest_checkpoint)
+                        batch_loss = train_loop_body(
+                            state_initializer, step, data
+                        )
+                    if np.isfinite(batch_loss.numpy()):
+                        batch_losses += [batch_loss]
+                    else:
+                        print("Batch loss NaN")
 
-            loss = tf.reduce_mean(batch_loss)
+            loss = tf.reduce_mean(batch_losses)
             avg_losses += [loss]
             losses += [loss]
-            deviation = tf.math.reduce_std(batch_loss)
+            deviation = tf.math.reduce_std(batch_losses)
             rel = deviation/loss
             print(
-                f"Epoch {step}: average-batch loss: {loss} last batch loss: {batch_loss[-1]}")
+                f"Epoch {step}: average-batch loss: {loss} last batch loss: {batch_loss}")
 
             if True:  # step % check_every == 0:
 
