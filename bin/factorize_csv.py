@@ -22,8 +22,8 @@ def main():
         help="Enter the CSV file"
     )
     parser.add_argument(
-        '-e', '--epoch', nargs='?', type=int, default=50,
-        help='Enter Epoch value: Default: 50'
+        '-e', '--epoch', nargs='?', type=int, default=250,
+        help='Enter Epoch value: Default: 250'
     )
     parser.add_argument(
         '-d', '--dimension', nargs='?', type=int, default=2,
@@ -39,6 +39,11 @@ def main():
         help='Enter float. Default: 0.05'
     )
 
+    parser.add_argument(
+        '-lt', '--log-transform',
+        help='Log-transform?', action='store_true'
+    )
+
     args = parser.parse_args(sys.argv[1:])
     if args.csv_file is None:
         sys.exit("You need to specify a csv file")
@@ -48,7 +53,7 @@ def main():
         _FILENAME = args.csv_file
 
     _BATCH_SIZE = args.batch_size
-
+    _LOG_TRANSFORM = args.log_transform
     _EPOCH_NUMBER = args.epoch
     _DIMENSION = args.dimension
     _LEARNING_RATE = args.learning_rate
@@ -68,7 +73,7 @@ def main():
 
     factor = PoissonMatrixFactorization(
         csv_data_batched, latent_dim=_DIMENSION, strategy=None,
-        scale_columns=True,
+        scale_columns=True, log_transform=_LOG_TRANSFORM,
         u_tau_scale=1.0/np.sqrt(columns*N),
         dtype=tf.float64)
 
@@ -79,7 +84,7 @@ def main():
 
     print("Saving the encoding matrix")
 
-    filename = f"{_FILENAME}_{_DIMENSION}D_encoding.csv"
+    filename = f"{_FILENAME}_{_DIMENSION}D_encoding_{_LOG_TRANSFORM}.csv"
     with open(filename, "w") as f:
         writer = csv.writer(f)
         encoding = factor.encoding_matrix().numpy().T
@@ -91,12 +96,26 @@ def main():
     pcm = ax[0].imshow(
         factor.encoding_matrix().numpy()[::-1, :],
         vmin=0, cmap="Blues")
-    ax[0].set_yticks(np.arange(_DIMENSION))
-    ax[0].set_yticklabels(np.arange(_DIMENSION))
+    ax[0].set_yticks(np.arange(factor.feature_dim))
+    ax[0].set_yticklabels(np.arange(factor.feature_dim))
     ax[0].set_ylabel("item")
     ax[0].set_xlabel("factor dimension")
     ax[0].set_xticks(np.arange(_DIMENSION))
     ax[0].set_xticklabels(np.arange(_DIMENSION))
+
+    surrogate_samples = factor.surrogate_distribution.sample(250)
+    if 's' in surrogate_samples.keys():
+        weights = surrogate_samples['s']/tf.reduce_sum(surrogate_samples['s'],-2,keepdims=True)
+        intercept_data = az.convert_to_inference_data(
+            {
+                r"": 
+                    (tf.squeeze(surrogate_samples['w'])*weights[:,-1,:]*factor.column_norm_factor).numpy().T})
+    else:
+        intercept_data = az.convert_to_inference_data(
+            {
+                r"": 
+                    (tf.squeeze(surrogate_samples['w'])*factor.column_norm_factor).numpy().T})    
+
 
     fig.colorbar(pcm, ax=ax[0], orientation="vertical")
     az.plot_forest(intercept_data, ax=ax[1])
@@ -104,7 +123,7 @@ def main():
     ax[1].set_ylim((-0.014, .466))
     ax[1].set_title("65% and 95% CI")
     ax[1].axvline(1.0, linestyle='dashed', color="black")
-    plt.savefig(f"{_FILENAME}_{_DIMENSION}D_encoding.pdf", bbox_inches='tight')
+    plt.savefig(f"{_FILENAME}_{_DIMENSION}D_encoding_{_LOG_TRANSFORM}.pdf", bbox_inches='tight')
     # plt.show()
 
 
