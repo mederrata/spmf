@@ -393,6 +393,7 @@ def batched_minimize(loss_fn,
                         batch_loss = train_loop_body(
                             state_initializer, step, data
                         )
+                        decay_step += 1
                     if np.isfinite(batch_loss.numpy()):
                         batch_losses += [batch_loss]
                     else:

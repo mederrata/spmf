@@ -367,7 +367,7 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -30*tf.ones((self.feature_dim, self.latent_dim),
+                    -15*tf.ones((self.feature_dim, self.latent_dim),
                                                   dtype=self.dtype),
                     5e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
@@ -397,7 +397,7 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -30*tf.ones(
+                    -5*tf.ones(
                         (self.latent_dim, self.feature_dim),
                         dtype=self.dtype),
                     5e-4*tf.ones((self.latent_dim, self.feature_dim),

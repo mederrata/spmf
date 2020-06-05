@@ -68,7 +68,7 @@ def main():
 
     factor = PoissonMatrixFactorization(
         csv_data_batched, latent_dim=_DIMENSION, strategy=None,
-        scale_rates=True,
+        scale_columns=True,
         u_tau_scale=1.0/np.sqrt(columns*N),
         dtype=tf.float64)
 
