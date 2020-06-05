@@ -34,12 +34,15 @@ UMAP = np.load(datapath + dataset_name + '_UMAP.npy')
 
 #remove genes with very low column sums (cells per gene)
 X_column_sums = (X>0).sum(0)
-X=X[:,X_column_sums>30]
+X=X[:,X_column_sums>10]
 
-P = 4
+P = 7
+panels=(4,2)
+
 D = X.shape[1]
-N_BATCHES = 4
+N_BATCHES = 6
 BATCH_SIZE = int(np.floor(X.shape[0]/N_BATCHES))
+
 
 after = np.median(np.array(X.sum(1)))
 # after=1
@@ -49,7 +52,7 @@ row_size_factors = X.sum(1) / after
 X = X[:, :D]
 gene_names = gene_names[:D]
 X_row_means = X.mean(1)
-X_column_means = X.mean(0)
+X_col_means = X.mean(0)
 
 after = np.median(np.array(X.sum(0)))
 # after=1
@@ -58,7 +61,7 @@ col_size_factors = X.sum(0) / after
 row_norm=row_size_factors
 # col_norm=col_size_factors
 # row_norm=X_row_means
-col_norm=X_column_means
+col_norm=X_col_means
 
 # alternative: specify a list of known cell type markers
 # marker_genes = ['IL7R', 'CD79A', 'MS4A1', 'CD8A', 'CD8B', 'LYZ', 'CD14',
@@ -88,23 +91,41 @@ data = data.batch(BATCH_SIZE, drop_remainder=True)
 strategy = None
 factor = PoissonMatrixFactorization(
     data, latent_dim=P, strategy=strategy,
-    scale_rates=True, column_norms=X_column_means,
+    scale_rates=True, column_norms=col_norm,
     u_tau_scale=1.0/np.sqrt(D*N),
     dtype=tf.float64, 
-    # encoder_function=lambda x: tf.math.log(x+1), decoder_function=lambda x: tf.math.exp(x)-1,
+    encoder_function=lambda x: tf.math.log(x/col_norm+1), decoder_function=lambda x: tf.math.exp(x*col_norm)-1,
     )
-    # encoder_function=lambda x: tf.math.log(x/X_column_means+1), decoder_function=lambda x: tf.math.exp(x*X_column_means)-1,
+    # encoder_function=lambda x: tf.math.log(x+1), decoder_function=lambda x: tf.math.exp(x)-1,
     # encoder_function=lambda x: x, decoder_function=lambda x: x,
 
 losses = factor.calibrate_advi(
-    num_epochs=50, learning_rate=0.25)
+    num_epochs=200, learning_rate=0.05,
+    abs_tol=1e-3, rel_tol=1e-3,
+    clip_value=1.,
+    )
 
 # waic = factor.waic()
 # print(waic)
 
+# encoding matrix
+U = factor.encoding_matrix().numpy()
+
+# cell score
+Z = factor.encode(X).numpy()
+cell_score = Z * row_norm[:,np.newaxis]
+# cell_score = Z * X_row_means[:,np.newaxis]
+
 # gene score 
 V = factor.decoding_matrix().numpy()
 gene_score = V * col_norm[np.newaxis,:]
+
+np.save(datapath + dataset_name + '_U.npy', U)
+np.save(datapath + dataset_name + '_cellscore.npy', cell_score)
+np.save(datapath + dataset_name + '_genescore.npy', gene_score)
+
+####
+# plotting
 
 # use all genes (with makers)
 # topix = range(min(len(gene_names), 20))
@@ -151,26 +172,23 @@ topgix=np.argmax(gene_score, axis=1)
 Xn=X/row_size_factors[:,np.newaxis]
 Xl=np.log10(Xn[:,topgix]+1)
 
-fig, AX = plt.subplots(2, 2, figsize=(5, 5))
-for i, ax in enumerate(AX.flat):
+fig, AX = plt.subplots(panels[0], panels[1], figsize=(5, 5))
+AX = AX.flat
+for i in range(P):
     idx = Xl[:,i].argsort()
-    plt.sca(ax)
+    plt.sca(AX[i])
     hs = plt.scatter(UMAP[idx,0], UMAP[idx,1], c=Xl[idx, i], s=5)
     plt.title(gene_names[topgix[i]])
     plt.axis('off')
 plt.tight_layout()
 # plt.show()
 
-# cell score
-Z = factor.encode(X).numpy()
-cell_score = Z * row_norm[:,np.newaxis]
-# cell_score = Z * X_row_means[:,np.newaxis]
-
-
-fig, AX = plt.subplots(2, 2, figsize=(5, 5))
-for i, ax in enumerate(AX.flat):
+# cell scores
+fig, AX = plt.subplots(panels[0], panels[1], figsize=(5, 5))
+AX = AX.flat
+for i in range(P):
     idx = cell_score[:,i].argsort()
-    plt.sca(ax)
+    plt.sca(AX[i])
     hs = plt.scatter(UMAP[idx,0], UMAP[idx,1], c=cell_score[idx, i], s=5)
     plt.title(f"factor {i}")
     plt.axis('off')
@@ -186,6 +204,8 @@ plt.plot(nploss)
 # plt.ylim((lastloss*0.9, lastloss*1.25))
 # plt.savefig(f"./cache/losses.png", bbox_inches='tight', transparent=False)
 plt.show()
+
+
 
 # factor.save()
 print("done")
