@@ -5,7 +5,8 @@
 import sys
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
+# os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+ 
 import scanpy as sc  # for interface to single cell stuff
 from mederrata_spmf import PoissonMatrixFactorization
 import matplotlib.font_manager as fm
@@ -19,6 +20,7 @@ import numpy as np
 
 
 rcParams['font.family'] = 'sans-serif'
+rcParams.update({'figure.autolayout': True})
 
 sys.path.append('../')
 
@@ -30,23 +32,33 @@ gene_names = np.load(datapath + dataset_name +
                      '_genenames.npy', allow_pickle=True)
 UMAP = np.load(datapath + dataset_name + '_UMAP.npy')
 
-P = 10
+#remove genes with very low column sums (cells per gene)
+X_column_sums = (X>0).sum(0)
+X=X[:,X_column_sums>30]
+
+P = 4
 D = X.shape[1]
-N_BATCHES = 6
+N_BATCHES = 4
 BATCH_SIZE = int(np.floor(X.shape[0]/N_BATCHES))
 
-# normalization for cells, computed using all genes
-counts_per_cell = X.sum(1)
-after = np.median(np.array(counts_per_cell))
-# after=1e4
-size_factors = counts_per_cell / after
-norm_vals = size_factors
+after = np.median(np.array(X.sum(1)))
+# after=1
+row_size_factors = X.sum(1) / after
 
 # keep the first D genes
 X = X[:, :D]
-gene_names=gene_names[:D]
-
+gene_names = gene_names[:D]
+X_row_means = X.mean(1)
 X_column_means = X.mean(0)
+
+after = np.median(np.array(X.sum(0)))
+# after=1
+col_size_factors = X.sum(0) / after
+
+row_norm=row_size_factors
+# col_norm=col_size_factors
+# row_norm=X_row_means
+col_norm=X_column_means
 
 # alternative: specify a list of known cell type markers
 # marker_genes = ['IL7R', 'CD79A', 'MS4A1', 'CD8A', 'CD8B', 'LYZ', 'CD14',
@@ -66,36 +78,36 @@ data = tf.data.Dataset.from_tensor_slices(
     {
         'data': X,
         'indices': np.arange(N),
-        'normalization': norm_vals
+        'normalization': row_size_factors
     })
 
-data = data.shuffle(buffer_size=N)
+# data = data.shuffle(buffer_size=N)
 data = data.batch(BATCH_SIZE, drop_remainder=True)
 
 # strategy = tf.distribute.MirroredStrategy()
-# encoder_function=lambda x: tf.math.log(x+1), decoder_function=lambda x: tf.math.exp(x)-1,
-# encoder_function=lambda x: x, decoder_function=lambda x: x,
 strategy = None
 factor = PoissonMatrixFactorization(
     data, latent_dim=P, strategy=strategy,
     scale_rates=True, column_norms=X_column_means,
     u_tau_scale=1.0/np.sqrt(D*N),
-    dtype=tf.float64)
+    dtype=tf.float64, 
+    # encoder_function=lambda x: tf.math.log(x+1), decoder_function=lambda x: tf.math.exp(x)-1,
+    )
+    # encoder_function=lambda x: tf.math.log(x/X_column_means+1), decoder_function=lambda x: tf.math.exp(x*X_column_means)-1,
+    # encoder_function=lambda x: x, decoder_function=lambda x: x,
 
 losses = factor.calibrate_advi(
-    num_epochs=200, learning_rate=0.025)
+    num_epochs=50, learning_rate=0.25)
 
-waic = factor.waic()
-print(waic)
+# waic = factor.waic()
+# print(waic)
 
-surrogate_samples = factor.surrogate_distribution.sample(1000)
-weights = surrogate_samples['s'] / \
-    tf.reduce_sum(surrogate_samples['s'], -2, keepdims=True)
-
-encoding_matrix = factor.encoding_matrix().numpy()
+# gene score 
+V = factor.decoding_matrix().numpy()
+gene_score = V * col_norm[np.newaxis,:]
 
 # use all genes (with makers)
-topix = range(min(len(gene_names), 20))
+# topix = range(min(len(gene_names), 20))
 
 # genes with highest dispersion
 # topD = 20
@@ -104,32 +116,67 @@ topix = range(min(len(gene_names), 20))
 # try to extract the topD features loaded onto each latent dimension for a plot
 topD=5
 topix=[]
-for d in range(P):
-    thisix=np.argsort(encoding_matrix[:,d])[::-1][:topD]
+for p in range(P):
+    thisix=np.argsort(gene_score[p,:])[::-1][:topD]
     topix+=thisix.tolist()
 
 
-fig, ax = plt.subplots(1, 2, figsize=(14, 8))
-pcm = ax[0].imshow(encoding_matrix[topix, :], vmin=0, cmap="Blues")
-ax[0].set_yticks(np.arange(len(topix)))
-ax[0].set_yticklabels(gene_names[topix])
-ax[0].set_ylabel("gene")
-ax[0].set_xlabel("factor dimension")
-ax[0].set_xticks(np.arange(P))
-ax[0].set_xticklabels(np.arange(P))
+# fig= plt.figure(figsize=(7, 4))
+# pcm = plt.imshow(gene_score[:,topix], vmin=0, cmap="Blues")
+# ax = plt.gca()
+# ax.xaxis.set_ticks_position('top')
+# plt.xticks(np.arange(len(topix)), gene_names[topix], rotation=90, )
+# plt.xlabel("gene")
+# plt.ylabel("factor dimension")
+# plt.yticks(np.arange(P),np.arange(P))
+# # # plt.savefig('encoding_matrix.pdf', bbox_inches='tight')
+# # fig.colorbar(pcm, ax=ax, orientation="vertical", shrink=0.25, aspect=10)
+# plt.show()
 
-fig.colorbar(pcm, ax=ax[0], orientation="vertical")
-ID = (tf.squeeze(surrogate_samples['w']) *
-      weights[:, -1, :]*factor.column_norm_factor).numpy().T
-ID = ID[topix, :]
-intercept_data = az.convert_to_inference_data({r"$w_d$": ID})
-az.plot_forest(intercept_data, ax=ax[1])
-ax[1].set_xlabel("background rate")
-ax[1].set_ylim((-0.014, .466))
-ax[1].set_title("65% and 95% CI")
-ax[1].axvline(1.0, linestyle='dashed', color="black")
-# plt.savefig('mix_factorization_sepmf.pdf', bbox_inches='tight')
-plt.show()
+fig= plt.figure(figsize=(2.5, 5))
+pcm = plt.imshow(np.transpose(gene_score[:,topix]), vmin=0, cmap="Blues")
+ax = plt.gca()
+plt.yticks(np.arange(len(topix)), gene_names[topix] )
+plt.ylabel("gene")
+plt.xlabel("factor dimension")
+plt.xticks(np.arange(P),np.arange(P))
+# # plt.savefig('encoding_matrix.pdf', bbox_inches='tight')
+# fig.colorbar(pcm, ax=ax, orientation="vertical", shrink=0.25, aspect=10)
+plt.tight_layout()
+# plt.show()
+
+# plot the top-loaded gene for each factor on UMAP
+topgix=np.argmax(gene_score, axis=1)
+
+Xn=X/row_size_factors[:,np.newaxis]
+Xl=np.log10(Xn[:,topgix]+1)
+
+fig, AX = plt.subplots(2, 2, figsize=(5, 5))
+for i, ax in enumerate(AX.flat):
+    idx = Xl[:,i].argsort()
+    plt.sca(ax)
+    hs = plt.scatter(UMAP[idx,0], UMAP[idx,1], c=Xl[idx, i], s=5)
+    plt.title(gene_names[topgix[i]])
+    plt.axis('off')
+plt.tight_layout()
+# plt.show()
+
+# cell score
+Z = factor.encode(X).numpy()
+cell_score = Z * row_norm[:,np.newaxis]
+# cell_score = Z * X_row_means[:,np.newaxis]
+
+
+fig, AX = plt.subplots(2, 2, figsize=(5, 5))
+for i, ax in enumerate(AX.flat):
+    idx = cell_score[:,i].argsort()
+    plt.sca(ax)
+    hs = plt.scatter(UMAP[idx,0], UMAP[idx,1], c=cell_score[idx, i], s=5)
+    plt.title(f"factor {i}")
+    plt.axis('off')
+plt.tight_layout()
+# plt.show()
+
 
 nploss = np.array(losses)
 fig = plt.figure(figsize=(7, 4))
@@ -142,3 +189,60 @@ plt.show()
 
 # factor.save()
 print("done")
+
+
+# encoding_matrix = factor.encoding_matrix().numpy()
+
+# # use all genes (with makers)
+# # topix = range(min(len(gene_names), 20))
+
+# # genes with highest dispersion
+# # topD = 20
+# # topix=range(topD)
+
+# # try to extract the topD features loaded onto each latent dimension for a plot
+# topD=5
+# topix=[]
+# for p in range(P):
+#     thisix=np.argsort(encoding_matrix[:,p])[::-1][:topD]
+#     topix+=thisix.tolist()
+
+
+# fig, ax = plt.subplots(1, 1, figsize=(5, 10))
+# pcm = ax.imshow(encoding_matrix[topix, :], vmin=0, cmap="Blues")
+# ax.set_yticks(np.arange(len(topix)))
+# ax.set_yticklabels(gene_names[topix])
+# ax.set_ylabel("gene")
+# ax.set_xlabel("factor dimension")
+# ax.set_xticks(np.arange(P))
+# ax.set_xticklabels(np.arange(P))
+# # # plt.savefig('encoding_matrix.pdf', bbox_inches='tight')
+# fig.colorbar(pcm, ax=ax, orientation="vertical")
+# plt.show()
+
+# # fig, ax = plt.subplots(1, 2, figsize=(14, 8))
+# # pcm = ax[0].imshow(encoding_matrix[topix, :], vmin=0, cmap="Blues")
+# # ax[0].set_yticks(np.arange(len(topix)))
+# # ax[0].set_yticklabels(gene_names[topix])
+# # ax[0].set_ylabel("gene")
+# # ax[0].set_xlabel("factor dimension")
+# # ax[0].set_xticks(np.arange(P))
+# # ax[0].set_xticklabels(np.arange(P))
+# # plt.show()
+
+# # surrogate_samples = factor.surrogate_distribution.sample(1000)
+# # weights = surrogate_samples['s'] / \
+# #     tf.reduce_sum(surrogate_samples['s'], -2, keepdims=True)
+
+# # fig.colorbar(pcm, ax=ax[0], orientation="vertical")
+# # ID = (tf.squeeze(surrogate_samples['w']) *
+# #       weights[:, -1, :]*factor.column_norm_factor).numpy().T
+# # ID = ID[topix, :]
+# # intercept_data = az.convert_to_inference_data({r"$w_d$": ID})
+# # az.plot_forest(intercept_data, ax=ax[1])
+# # ax[1].set_xlabel("background rate")
+# # ax[1].set_ylim((-0.014, .466))
+# # ax[1].set_title("65% and 95% CI")
+# # ax[1].axvline(1.0, linestyle='dashed', color="black")
+# # # plt.savefig('mix_factorization_sepmf.pdf', bbox_inches='tight')
+# # plt.show()
