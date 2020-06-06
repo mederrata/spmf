@@ -42,16 +42,18 @@ size_factors = counts_per_cell / after
 norm_vals = size_factors
 
 # keep the first D genes
-# X = X[:, :D]
-# gene_names=gene_names[:D]
+X = X[:, :D]
+gene_names=gene_names[:D]
+
+X_column_means = X.mean(0)
 
 # alternative: specify a list of known cell type markers
-marker_genes = ['IL7R', 'CD79A', 'MS4A1', 'CD8A', 'CD8B', 'LYZ', 'CD14',
-                'LGALS3', 'S100A8', 'GNLY', 'NKG7', 'KLRB1',
-                'FCGR3A', 'MS4A7', 'FCER1A', 'CST3', 'PPBP']
-hvgix = pd.Series(gene_names).isin(marker_genes)
-X = X[:, hvgix]
-gene_names = gene_names[hvgix]
+# marker_genes = ['IL7R', 'CD79A', 'MS4A1', 'CD8A', 'CD8B', 'LYZ', 'CD14',
+#                 'LGALS3', 'S100A8', 'GNLY', 'NKG7', 'KLRB1',
+#                 'FCGR3A', 'MS4A7', 'FCER1A', 'CST3', 'PPBP']
+# hvgix = pd.Series(gene_names).isin(marker_genes)
+# X = X[:, hvgix]
+# gene_names = gene_names[hvgix]
 
 N, D = X.shape
 # print(X.shape)
@@ -75,7 +77,7 @@ data = data.batch(BATCH_SIZE, drop_remainder=True)
 strategy = None
 factor = PoissonMatrixFactorization(
     data, latent_dim=P, strategy=strategy,
-    scale_rates=True,
+    scale_rates=True, column_norms=X_column_means,
     u_tau_scale=1.0/np.sqrt(D*N),
     dtype=tf.float64)
 
