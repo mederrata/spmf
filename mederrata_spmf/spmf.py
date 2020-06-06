@@ -34,15 +34,39 @@ class PoissonMatrixFactorization(BayesianModel):
     bijectors = None
     var_list = []
     s_tau_scale = 1
-    def encoder_function(self, x): return x/self.column_norm_factor
-    def decoder_function(self, x): return x*self.column_norm_factor
+
+    def encoder_function(self, x):
+        """Encoder function (g)
+
+        Args:
+            x ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        if self.log_transform:
+            return tf.math.log(x/self.column_norm_factor+1.)
+        return x/self.column_norm_factor
+
+    def decoder_function(self, x):
+        """Decoder function (f)
+
+        Args:
+            x ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        if self.log_transform:
+            return tf.math.exp(x*self.column_norm_factor)-1.
+        return x*self.column_norm_factor
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, column_norms=None,
-            with_s=True, with_w=True,
+            with_s=True, with_w=True, log_transform=False,
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
 
@@ -77,6 +101,7 @@ class PoissonMatrixFactorization(BayesianModel):
         self.dtype = dtype
         self.symmetry_breaking_decay = symmetry_breaking_decay
         self.with_s = with_s
+        self.log_transform = log_transform
 
         if not with_s:
             self.log_likelihood = functools.partial(
@@ -367,8 +392,8 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -30*tf.ones((self.feature_dim, self.latent_dim),
-                                                  dtype=self.dtype),
+                    -15*tf.ones((self.feature_dim, self.latent_dim),
+                                dtype=self.dtype),
                     5e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
                     2,
@@ -397,7 +422,7 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -30*tf.ones(
+                    -5*tf.ones(
                         (self.latent_dim, self.feature_dim),
                         dtype=self.dtype),
                     5e-4*tf.ones((self.latent_dim, self.feature_dim),
