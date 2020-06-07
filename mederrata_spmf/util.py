@@ -1,4 +1,5 @@
 import functools
+import uuid
 
 import numpy as np
 import tensorflow as tf
@@ -40,7 +41,7 @@ def minimize_distributed(
         learning_rate=1.,
         check_every=25,
         decay_rate=0.95,
-        checkpoint_name='chkpt',
+        checkpoint_name=None,
         max_initialization_steps=1000,
         tf_dataset=None,
         data_input_signature=None,
@@ -49,6 +50,9 @@ def minimize_distributed(
         name='minimize',
         dtype=tf.float64,
         **kwargs):
+
+    checkpoint_name = str(
+        uuid.uuid4()) if checkpoint_name is None else checkpoint_name
 
     with strategy.scope():
         def batch_normalized_loss(data):
@@ -243,7 +247,7 @@ def batched_minimize(loss_fn,
                      learning_rate=1.,
                      check_every=25,
                      decay_rate=0.95,
-                     checkpoint_name='chkpt',
+                     checkpoint_name=None,
                      max_initialization_steps=1000,
                      tf_dataset=None,
                      processing_fn=None,
@@ -251,6 +255,8 @@ def batched_minimize(loss_fn,
                      clip_value=10.,
                      **kwargs):
 
+    checkpoint_name = str(
+        uuid.uuid4()) if checkpoint_name is None else checkpoint_name
     learning_rate = 1.0 if learning_rate is None else learning_rate
 
     def learning_rate_schedule_fn(step):
