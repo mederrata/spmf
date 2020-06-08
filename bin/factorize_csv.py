@@ -52,8 +52,6 @@ def main():
     )
 
     args = parser.parse_args(sys.argv[1:])
-    args.csv_file = "/Users/changjc/test.csv"
-    args.row_normalize = True
     if args.csv_file is None:
         sys.exit("You need to specify a csv file")
     elif not os.path.exists(args.csv_file):
