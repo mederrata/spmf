@@ -24,7 +24,7 @@ def main():
         help="Enter the CSV file"
     )
     parser.add_argument(
-        '-e', '--epoch', nargs='?', type=int, default=2,
+        '-e', '--epoch', nargs='?', type=int, default=300,
         help='Enter Epoch value: Default: 300'
     )
     parser.add_argument(
