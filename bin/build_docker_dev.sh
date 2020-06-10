@@ -1,3 +1,3 @@
 #!/bin/sh
 
-docker build . -f Dockerfile -t 'smpf'
+docker build . -f Dockerfile -t 'spmf'

@@ -9,7 +9,7 @@ with open("README.md", "r") as fh:
 
 
 setuptools.setup(
-    name="mederrata_spmf",  # Replace with your own username
+    name="mederrata-spmf",
     version="0.0.1",
     author="mederrata",
     author_email="info@mederrata.com",
