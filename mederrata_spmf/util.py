@@ -1,4 +1,5 @@
 import functools
+import inspect
 import uuid
 
 import numpy as np
@@ -18,6 +19,8 @@ from tensorflow_probability.python.internal import (dtype_util, prefer_static,
                                                     tensorshape_util)
 from tensorflow.python.data.ops.dataset_ops import BatchDataset
 from tensorflow_probability.python.vi import csiszar_divergence
+
+from mederrata_spmf.distributions import SqrtInverseGamma
 
 tfd = tfp.distributions
 tfb = tfp.bijectors

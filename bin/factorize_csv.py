@@ -37,8 +37,13 @@ def main():
     )
 
     parser.add_argument(
-        '-lr', '--learning-rate', nargs='?', type=float, default=0.05,
-        help='Enter float. Default: 0.05'
+        '-lr', '--learning-rate', nargs='?', type=float, default=0.01,
+        help='Enter float. Default: 0.01'
+    )
+    
+    parser.add_argument(
+        '-c', '--clip-value', nargs='?', type=float, default=3.,
+        help='Gradient clip value. Default: 3.0'
     )
 
     parser.add_argument(
@@ -65,6 +70,7 @@ def main():
     _DIMENSION = args.dimension
     _LEARNING_RATE = args.learning_rate
     _ROW_NORMALIZE = args.row_normalize
+    _CLIP_VALUE = args.clip_value
 
     with open(_FILENAME) as f:
         csv_file = csv.reader(f)
@@ -112,7 +118,7 @@ def main():
 
     factor.calibrate_advi(
         num_epochs=_EPOCH_NUMBER,
-        rel_tol=1e-4,
+        rel_tol=1e-4, clip_value=_CLIP_VALUE,
         learning_rate=_LEARNING_RATE)
 
     print("Saving the encoding matrix")
