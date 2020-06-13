@@ -153,6 +153,8 @@ def minimize_distributed(
                     status = "Backtracking"
                     print(status)
                     cp_status = checkpoint.restore(manager.latest_checkpoint)
+                    cp_status.assert_consumed()
+
                     if accepted_batches == 0:
                         if epoch > max_initialization_steps:
                             converged = True
@@ -398,7 +400,9 @@ def batched_minimize(loss_fn,
                             state_initializer, step, data
                         )
                     if not np.isfinite(batch_loss.numpy()):
-                        checkpoint.restore(manager.latest_checkpoint)
+                        cp_status = checkpoint.restore(manager.latest_checkpoint)
+                        cp_status.assert_consumed()
+
                         batch_loss = train_loop_body(
                             state_initializer, step, data
                         )
@@ -421,7 +425,9 @@ def batched_minimize(loss_fn,
                 """Check for convergence
                 """
                 if not np.isfinite(loss):
-                    checkpoint.restore(manager.latest_checkpoint)
+                    cp_status = checkpoint.restore(manager.latest_checkpoint)
+                    cp_status.assert_consumed()
+
                     #raise ArithmeticError(
                     #    "We are NaN, restored the last checkpoint")
                     print("Got NaN, restoring a checkpoint")
