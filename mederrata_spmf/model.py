@@ -23,18 +23,16 @@ class BayesianModel(object):
     prior_distribution = None
     data = None
     var_list = []
+    bijectors = []
 
     def __init__(self, data, data_transform_fn=None,
                  strategy=None, *args, **kwargs):
         """Instatiate Model object based on tensorflow dataset
-
         Arguments:
             data {[type]} -- [description]
-
         Keyword Arguments:
             data_transform_fn {[type]} -- [description] (default: {None})
             strategy {[type]} -- [description] (default: {None})
-
         Raises:
             AttributeError: [description]
         """
@@ -79,7 +77,7 @@ class BayesianModel(object):
     def calibrate_advi(
             self, num_epochs=100, learning_rate=0.1,
             opt=None, abs_tol=1e-10, rel_tol=1e-8,
-            clip_value=5., max_decay_steps=25,
+            clip_value=5., max_decay_steps=25, lr_decay_factor=0.99,
             check_every=25, set_expectations=True, sample_size=4,
             **kwargs):
 
@@ -91,6 +89,7 @@ class BayesianModel(object):
                 sample_size=sample_size,
                 learning_rate=learning_rate,
                 max_decay_steps=max_decay_steps,
+                decay_rate=lr_decay_factor,
                 abs_tol=abs_tol,
                 rel_tol=rel_tol,
                 clip_value=clip_value,
@@ -166,9 +165,33 @@ class BayesianModel(object):
     def log_likelihood(self, *args, **kwargs):
         pass
 
-    def psis_loo(self, data=None, params=None):
-        pass
+    def psis_loo(self, data=None, params=None, num_samples=100, num_splits=20):
+        data = self.data if data is None else data
+        likelihood_vars = inspect.getfullargspec(
+            self.log_likelihood).args[1:]
 
+        # split param samples
+        params = self.surrogate_sample if params is None else params
+        if 'data' in likelihood_vars:
+            likelihood_vars.remove('data')
+        params = self.surrogate_distribution.sample(num_samples) if (
+            params is None) else params
+        if len(likelihood_vars) == 0:
+            likelihood_vars = params.keys()
+        if 'data' in likelihood_vars:
+            likelihood_vars.remove('data')
+        splits = [
+            tf.split(
+                params[v],
+                num_splits) for v in likelihood_vars]
+
+        # reshape the splits
+        splits = [
+            {
+                k: v for k, v in zip(
+                    likelihood_vars, split)} for split in zip(*splits)]
+
+                    
     def waic(self, data=None, params=None, num_samples=100, num_splits=20):
         data = self.data if data is None else data
         likelihood_vars = inspect.getfullargspec(
@@ -222,6 +245,17 @@ class BayesianModel(object):
             batch_log_likelihoods = tf.concat(
                 batch_log_likelihoods, axis=0
             )
+            finite_part = tf.where(
+                tf.math.is_finite(batch_log_likelihoods),
+                batch_log_likelihoods,
+                tf.zeros_like(batch_log_likelihoods))
+            min_val = tf.math.reduce_min(finite_part)
+            #  batch_ll = tf.clip_by_value(batch_ll, min_val-1000, 0.)
+            batch_log_likelihoods = tf.where(
+                tf.math.is_finite(batch_log_likelihoods),
+                batch_log_likelihoods,
+                tf.ones_like(batch_log_likelihoods)*min_val - 1000.
+            )
             batch_log_likelihoods = tf.cast(batch_log_likelihoods, tf.float64)
             sum_S_log_likelihoods = sum_S_log_likelihoods + tf.reduce_sum(
                 batch_log_likelihoods, axis=0)
@@ -243,7 +277,7 @@ class BayesianModel(object):
         lppdi = tf.math.log(
             tf.cast(mean_S_likelihood, tf.float64)
         )
-        lppd = tf.reduce_sum(lppdi)
+        lppd = tf.reduce_sum(lppdi).numpy()
 
         mean_sq_S_log_likelihood = (
             sum_S_sq_log_likes/tf.cast(N, sum_S_sq_log_likes.dtype))
@@ -251,7 +285,7 @@ class BayesianModel(object):
             sum_S_log_likelihoods/tf.cast(N, sum_S_log_likelihoods.dtype))
         pwaici = mean_sq_S_log_likelihood - mean__S_log_likelihood**2
 
-        pwaic = tf.reduce_sum(pwaici)
+        pwaic = tf.reduce_sum(pwaici).numpy()
 
         elpdi = lppdi-pwaici
 
@@ -262,7 +296,7 @@ class BayesianModel(object):
             tf.cast(tf.math.reduce_variance(elpdi), dtype=tf.float64))
 
         return {
-            'waic': waic.numpy(), 'se': se.numpy(), 'lppd': lppd.numpy(), 'pwaic': pwaic.numpy()}
+            'waic': waic, 'se': se.numpy(), 'lppd': lppd, 'pwaic': pwaic}
 
     def save(self, filename="model_save.pkl"):
         with open(filename, 'wb') as file:
@@ -280,7 +314,6 @@ class BayesianModel(object):
             elif isinstance(state[k], dict) or isinstance(state[k], list):
                 flat = tf.nest.flatten(state[k])
                 new = []
-                flagged_for_deletion = []
                 for t in flat:
                     if isinstance(t, tf.Tensor) or isinstance(t, tf.Variable):
                         # print(k)
@@ -304,6 +337,15 @@ class BayesianModel(object):
                         del state[k]
         state['strategy'] = None
         return(state)
+
+    def unormalized_log_prob_list(self, params):
+        dict_params = {k: p for k, p in zip(self.var_list, params)}
+        return self.unormalized_log_prob(**dict_params)
+
+    def unormalized_log_prob(self, *args, **kwargs):
+        """Generic method for the unormalized log probability function
+        """
+        return
 
     def reconstitute(self, state):
         pass

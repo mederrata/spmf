@@ -37,10 +37,8 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def encoder_function(self, x):
         """Encoder function (g)
-
         Args:
             x ([type]): [description]
-
         Returns:
             [type]: [description]
         """
@@ -50,10 +48,8 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def decoder_function(self, x):
         """Decoder function (f)
-
         Args:
             x ([type]): [description]
-
         Returns:
             [type]: [description]
         """
@@ -65,15 +61,13 @@ class PoissonMatrixFactorization(BayesianModel):
             self, data, data_transform_fn=None, latent_dim=None,
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
-            scale_columns=True, column_norms=None,
+            scale_columns=True, column_norms=None, scale_rows=True,
             with_s=True, with_w=True, log_transform=False,
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
-
         Arguments:
             data {[type]} -- a BatchDataset object that
                              we will iterate for training
-
         Keyword Arguments:
             data_transform_fn {[type]} -- Not currently used,
                 but intended to allow for specification
@@ -86,7 +80,8 @@ class PoissonMatrixFactorization(BayesianModel):
             strategy {[type]} -- For multi-GPU (default: {None})
             decoder_function {[type]} -- f(x) (default: {None})
             encoder_function {[type]} -- g(x) (default: {None})
-            scale_coliumns {bool} -- Scale the rates by the mean of the first batch (default: {True})
+            scale_columns {bool} -- Scale the rates by the mean of the first batch (default: {True})
+            scale_row {bool} -- Scale by normalized row sums (default: {True})
             with_s {bool} -- [description] (default: {True})
             with_w {bool} -- [description] (default: {True})
             dtype {[type]} -- [description] (default: {tf.float64})
@@ -113,7 +108,7 @@ class PoissonMatrixFactorization(BayesianModel):
         else:
             if with_s:
                 print("Disabling s because w is disabled")
-            
+
             self.log_likelihood = functools.partial(
                 self.log_likelihood, s=1., w=0.)
             self.log_likelihood_components = functools.partial(
@@ -125,6 +120,7 @@ class PoissonMatrixFactorization(BayesianModel):
         indices = record['indices']
         data = record['data']
         self.column_norm_factor = 1.
+        self.scale_rows = scale_rows
 
         if scale_columns:
             if column_norms is not None:
@@ -151,16 +147,13 @@ class PoissonMatrixFactorization(BayesianModel):
     def log_likelihood_components(
             self, s, u, v, w, data, *args, **kwargs):
         """Returns the log likelihood without summing along axes
-
         Arguments:
             s {tf.Tensor} -- Samples of s
             u {tf.Tensor} -- Samples of u
             v {tf.Tensor} -- Samples of v
             w {tf.Tensor} -- Samples of w
-
         Keyword Arguments:
             data {tf.Tensor} -- Count matrix (default: {None})
-
         Returns:
             [tf.Tensor] -- log likelihood in broadcasted shape
         """
@@ -190,14 +183,10 @@ class PoissonMatrixFactorization(BayesianModel):
             rate = self.decoder_function(tf.matmul(z, v)) + w
 
         # Rescale rows
-        row_multiplier = 1.
-        if 'normalization' in data.keys():
-            row_multiplier = data['normalization'][..., tf.newaxis]
-            for _ in range(len(rate.shape)-len(row_multiplier.shape)):
-                # pad to match shapes
-                row_multiplier = row_multiplier[tf.newaxis, ...]
-        rate *= tf.cast(row_multiplier, self.dtype)
-
+        if self.scale_rows:
+            rate *= tf.math.maximum(
+                tf.reduce_sum(data['data'], axis=0, keepdims=True), 1.)
+            rate /= tf.reduce_sum(self.column_norm_factor)
         # Rescale columns
         rate *= self.column_norm_factor
 
@@ -210,16 +199,13 @@ class PoissonMatrixFactorization(BayesianModel):
     def log_likelihood(
             self, s, u, v, w, data, *args, **kwargs):
         """Returns the log likelihood, summed over rows
-
         Arguments:
             s {tf.Tensor} -- Samples of s
             u {tf.Tensor} -- Samples of u
             v {tf.Tensor} -- Samples of v
             w {tf.Tensor} -- Samples of w
-
         Keyword Arguments:
             data {Dict} -- Dataset dict (default: {None})
-
         Returns:
             [tf.Tensor] -- log likelihood in broadcasted shape
         """
@@ -238,7 +224,6 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def create_distributions(self):
         """Create distribution objects
-
         """
         self.bijectors = {
             'u': tfb.Softplus(),
@@ -313,7 +298,7 @@ class PoissonMatrixFactorization(BayesianModel):
                     tfd.HalfCauchy(
                         loc=tf.zeros((1, self.feature_dim), dtype=self.dtype),
                         scale=tf.ones((1, self.feature_dim),
-                                    dtype=self.dtype)*self.s_tau_scale
+                                      dtype=self.dtype)*self.s_tau_scale
                     ), reinterpreted_batch_ndims=2
                 )
 
@@ -404,7 +389,7 @@ class PoissonMatrixFactorization(BayesianModel):
         surrogate_dict = {
             'u': self.bijectors['u'](
                 build_trainable_normal_dist(
-                    -15*tf.ones((self.feature_dim, self.latent_dim),
+                    -8.*tf.ones((self.feature_dim, self.latent_dim),
                                 dtype=self.dtype),
                     5e-4*tf.ones((self.feature_dim, self.latent_dim),
                                  dtype=self.dtype),
@@ -550,10 +535,8 @@ class PoissonMatrixFactorization(BayesianModel):
 
     def unormalized_log_prob_parts(self, data=None, **params):
         """Energy function
-
         Keyword Arguments:
             data {dict} -- Should be a single batch (default: {None})
-
         Returns:
             tf.Tensor -- Energy of broadcasted shape
         """
@@ -622,11 +605,21 @@ class PoissonMatrixFactorization(BayesianModel):
 
     @tf.function(input_signature=[tf.TensorSpec([None, None], tf.float64)])
     def encode(self, x):
+        """Returns the rescaled representation
+        Args:
+            x ([type]): [description]
+        Returns:
+            [type]: [description]
+        """
         encoding = self.encoding_matrix()
-        return tf.matmul(
+        Z = tf.matmul(
             self.encoder_function(
                 tf.cast(x, self.dtype)
             ), encoding)
+        if self.scale_rows:
+            Z *= tf.reduce_sum(tf.cast(x, self.dtype), axis=-1, keepdims=True)
+            Z /= tf.cast(tf.reduce_sum(self.column_norm_factor), self.dtype)
+        return Z
 
     def encoding_matrix(self):
         if not self.with_s:
