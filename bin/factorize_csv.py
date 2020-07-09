@@ -108,6 +108,8 @@ def main():
             })
 
     csv_data_batched = csv_data.batch(_BATCH_SIZE, drop_remainder=True)
+    csv_data_batched = csv_data_batched.prefetch(
+        tf.data.experimental.AUTOTUNE)
 
     factor = PoissonMatrixFactorization(
         csv_data_batched, latent_dim=_DIMENSION, strategy=None,
