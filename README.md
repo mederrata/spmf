@@ -16,7 +16,13 @@ pip install git+https://github.com/mederrata/spmf.git
 
 ## Examples
 
-1. Factorization of random noise [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/spmf/blob/master/notebooks/factorizing_random_noise.ipynb)
+You'll find these examples under notebooks/ - for your convenience, here are links to open them in Google Colab. Note that you will need to install the package within Colab using
+
+```python
+!pip install git+https://github.com/mederrata/spmf.git
+```
+
+1. Factorization of random noise [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mederrata/spmf/blob/master/notebooks/factorizing_random_noise.ipynb)
 
 2. Factorization of synthetic data with underlying linear structure [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mederrata/spmf/blob/master/notebooks/factorize_linear_structure.ipynb)
 
