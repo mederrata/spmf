@@ -185,8 +185,10 @@ class PoissonMatrixFactorization(BayesianModel):
         # Rescale rows
         if self.scale_rows:
             rate *= tf.math.maximum(
-                tf.reduce_sum(
-                    data['data'], axis=0, keepdims=True),
+                tf.cast(
+                    tf.reduce_sum(
+                        data['data'], axis=0, keepdims=True),
+                    self.dtype),
                 tf.cast(1.0, self.dtype))
             rate /= tf.reduce_sum(self.column_norm_factor)
         # Rescale columns
