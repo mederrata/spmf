@@ -38,7 +38,7 @@ def main():
         **sample_surrogate,  data=next(iter(data)))
 
     losses = factor.calibrate_advi(
-        num_epochs=50, rel_tol=1e-4, learning_rate=.1)
+        num_epochs=20, rel_tol=1e-4, learning_rate=.1)
 
     waic = factor.waic()
     print(waic)
