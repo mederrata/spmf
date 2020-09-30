@@ -43,8 +43,8 @@ class PoissonMatrixFactorization(BayesianModel):
             [type]: [description]
         """
         if self.log_transform:
-            return tf.math.log(x/self.column_norm_factor+1.)
-        return x/self.column_norm_factor
+            return tf.math.log(x/self.eta_i+1.)
+        return x/self.eta_i
 
     def decoder_function(self, x):
         """Decoder function (f)
@@ -54,8 +54,8 @@ class PoissonMatrixFactorization(BayesianModel):
             [type]: [description]
         """
         if self.log_transform:
-            return tf.math.exp(x*self.column_norm_factor)-1.
-        return x*self.column_norm_factor
+            return tf.math.exp(x*self.eta_i)-1.
+        return x*self.eta_i
 
     def __init__(
             self, data, data_transform_fn=None, latent_dim=None,
@@ -119,20 +119,28 @@ class PoissonMatrixFactorization(BayesianModel):
         record = next(iter(data))
         indices = record['indices']
         data = record['data']
-        self.column_norm_factor = 1.
+        self.eta_i = 1.
+        self.xi_u_global = 1.
         self.scale_rows = scale_rows
 
         if scale_columns:
             if column_norms is not None:
-                self.column_norm_factor = tf.cast(
+                self.eta_i = tf.cast(
                     column_norms, self.dtype)
             else:
-                self.column_norm_factor = tf.reduce_mean(
-                    tf.cast(data, self.dtype), axis=0, keepdims=True)
-
-        if 'normalization' in record.keys():
-            norm = record['normalization']
-        data = tf.cast(data, self.dtype)
+                self.eta_i = tf.reduce_mean(
+                    tf.cast(data, self.dtype), axis=0, keepdims=True) # eta_i
+            
+        if scale_rows:
+            # xi_u = \sum y_{ui} / (\sum\sum y_{ui}/U) 
+            # we compute here the denominator term that we use globally for normalization
+            # note that if 'nornalization' is given as a key in the data, we ignore this quantity
+            total_sum = tf.reduce_sum(
+                    tf.cast(data, self.dtype)
+                    )
+            U = tf.cast(data.shape[0], self.dtype)
+            self.xi_u_global = total_sum/U
+                
         self.feature_dim = data.shape[-1]
         self.latent_dim = self.feature_dim if (
             latent_dim) is None else latent_dim
@@ -157,48 +165,20 @@ class PoissonMatrixFactorization(BayesianModel):
         Returns:
             [tf.Tensor] -- log likelihood in broadcasted shape
         """
-        if self.with_s:
-            weights = s/tf.reduce_sum(s, axis=-2, keepdims=True)
-            weights_1 = tf.expand_dims(weights[..., 0, :], -1)
-            weights_2 = tf.expand_dims(weights[..., 1, :], -1)
-        else:
-            weights_1 = 1.
-            weights_2 = 1.
 
-        encoding = weights_1*u
-        log_likes = []
+        theta_u = self.encode(data['data'], u, s)
+        phi = self.intercept_matrix(w, s)
+        B = self.decoding_matrix(v)
 
-        z = tf.matmul(
-            self.encoder_function(
-                tf.cast(data['data'], self.dtype)),
-            encoding
-        )
+        theta_beta = tf.matmul(theta_u, B)
+        theta_beta = self.decoder_function(theta_beta)
 
-        if self.with_s:
-            L = len(weights_2.shape)
-            trans = tuple(list(range(L-2)) + [L-1, L-2])
-            weights_2 = tf.transpose(weights_2, trans)
-            rate = self.decoder_function(tf.matmul(z, v)) + weights_2*w
-        else:
-            rate = self.decoder_function(tf.matmul(z, v)) + w
-
-        # Rescale rows
-        if self.scale_rows:
-            row_sum = tf.reduce_sum(
-                        data['data'], axis=0, keepdims=True)
-            rate *= tf.math.maximum(
-                tf.cast(row_sum, dtype=self.dtype),
-                tf.ones_like(row_sum, dtype=self.dtype)
-                )
-            rate /= tf.reduce_sum(self.column_norm_factor)
-        # Rescale columns
-        rate *= self.column_norm_factor
-
+        rate = theta_beta + phi
         rv_poisson = tfd.Poisson(rate=rate)
 
         return rv_poisson.log_prob(
             tf.cast(data['data'], self.dtype))
-
+        
     # @tf.function
     def log_likelihood(
             self, s, u, v, w, data, *args, **kwargs):
@@ -557,27 +537,15 @@ class PoissonMatrixFactorization(BayesianModel):
         prior_parts = self.joint_prior.log_prob_parts(params)
         log_likelihood = self.log_likelihood_components(data=data, **params)
 
-        if self.with_s:
-            weights = params['s']/tf.reduce_sum(
-                params['s'], axis=-2, keepdims=True)
-            weights_1 = tf.expand_dims(weights[..., 0, :], -1)
-            weights_2 = tf.expand_dims(weights[..., 1, :], -1)
-        else:
-            weights_1 = 1.
-            weights_2 = 1.
-
-        encoding = weights_1*params['u']
-        z = tf.matmul(
-            self.encoder_function(
-                tf.cast(data['data'], self.dtype)),
-            encoding
-        )
-        rv_z = tfd.Independent(
+        # For prior on theta
+        
+        theta = self.encode(x=data['data'], u=params['u'], s=params['s'])
+        rv_theta = tfd.Independent(
             tfd.HalfNormal(
-                scale=tf.ones_like(z, dtype=self.dtype)),
+                scale=tf.ones_like(theta, dtype=self.dtype)),
             reinterpreted_batch_ndims=2)
 
-        prior_parts['z'] = rv_z.log_prob(z)
+        prior_parts['z'] = rv_theta.log_prob(theta)
 
         finite_portion = tf.where(
             tf.math.is_finite(log_likelihood), log_likelihood,
@@ -596,57 +564,78 @@ class PoissonMatrixFactorization(BayesianModel):
 
         return prior_parts
 
-    def project(self, x, threshold=1e-1):
-        return tf.matmul(
-            self.encoder_function(tf.cast(x, self.dtype)),
-            tf.matmul(
-                tf.linalg.diag(
-                    self.calibrated_expectations['s'],
-                    self.calibrated_expectations['u']
-                )
-            )
-        )
-
-    @tf.function(input_signature=[tf.TensorSpec([None, None], tf.float64)])
-    def encode(self, x):
-        """Returns the rescaled representation
+    def encode(self, x, u=None, s=None):
+        """Returns theta given x
         Args:
             x ([type]): [description]
         Returns:
             [type]: [description]
         """
-        encoding = self.encoding_matrix()
-        Z = tf.matmul(
+        u = self.calibrated_expectations['u'] if u is None else u
+        s = self.calibrated_expectations['s'] if s is None else s
+
+        encoding = self.encoding_matrix(u, s)    # A = (\alpha_{ik})
+        z = tf.matmul(
             self.encoder_function(
                 tf.cast(x, self.dtype)
             ), encoding)
         if self.scale_rows:
-            Z *= tf.reduce_sum(tf.cast(x, self.dtype), axis=-1, keepdims=True)
-            Z /= tf.cast(tf.reduce_sum(self.column_norm_factor), self.dtype)
-        return Z
+            xi_u = tf.reduce_sum(
+                tf.cast(
+                    x, self.dtype), axis=-1, keepdims=True
+                )/self.xi_u_global
+            z *= xi_u
+        return z
 
-    def encoding_matrix(self):
+    def encoding_matrix(self, u=None, s=None):
+        """Output A = (\alpha_{ik})
+
+        Returns:
+            tf.Tensor: batch_shape x I x K 
+        """
+        u = self.calibrated_expectations['u'] if u is None else u
         if not self.with_s:
-            return self.calibrated_expectations['u']
-
-        weights = self.calibrated_expectations['s']/tf.reduce_sum(
-            self.calibrated_expectations['s'], axis=-2, keepdims=True)
+            return u
+        s = self.calibrated_expectations['s'] if s is None else s
+        weights = s/tf.reduce_sum(
+            s, axis=-2, keepdims=True)
         weights_1 = tf.expand_dims(weights[..., 0, :], -1)
 
-        encoding = weights_1*self.calibrated_expectations['u']
+        encoding = weights_1*u
         return encoding
 
-    def decoding_matrix(self):
-        return self.calibrated_expectations['v']
+    def decoding_matrix(self, v=None):
+        """Output $B=(\beta_{ki})$
 
-    def intercept_matrix(self):
+        Args:
+            v (tf.Tensor): default:None
+
+        Returns:
+            [type]: [description]
+        """
+        v = self.calibrated_expectations['v'] if v is None else v
+        return v
+
+    def intercept_matrix(self, w=None, s=None):
+        """export phi
+
+        Args:
+            w ([type], optional): [description]. Defaults to None.
+            s ([type], optional): [description]. Defaults to None.
+
+        Returns:
+            tf.Tensor: batch_shape x 1 x I
+        """
         if not self.with_w:
             return tf.zeros(
                 (1, self.feature_dim),
                 dtype=self.dtype)
+            
+        w = self.calibrated_expectations['w'] if w is None else w
         if self.with_s:
-            weights = self.calibrated_expectations['s']/tf.reduce_sum(
-                self.calibrated_expectations['s'], axis=-2)[
+            s = self.calibrated_expectations['s'] if s is None else s
+            weights = s/tf.reduce_sum(
+                s, axis=-2)[
                     ..., tf.newaxis, :]
             weights_2 = tf.expand_dims(weights[..., 1, :], -1)
             L = len(weights_2.shape)
@@ -654,10 +643,7 @@ class PoissonMatrixFactorization(BayesianModel):
             weights_2 = tf.transpose(weights_2, trans)
         else:
             weights_2 = 1.
-        return self.column_norm_factor*weights_2*self.calibrated_expectations['w']
-
-    def decode(self, z):
-        return tf.matmul(z, self.calibrated_expectations['v'])
+        return self.eta_i*weights_2*w
 
     @tf.function(autograph=False)
     def unormalized_log_prob_list(self, *x):
@@ -674,6 +660,3 @@ class PoissonMatrixFactorization(BayesianModel):
             self.surrogate_distribution.trainable_variables[j].assign(
                 tf.cast(value, self.dtype))
         #  self.set_calibration_expectations()
-
-    def sparsify(self):
-        pass
