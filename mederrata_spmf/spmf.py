@@ -538,8 +538,11 @@ class PoissonMatrixFactorization(BayesianModel):
         log_likelihood = self.log_likelihood_components(data=data, **params)
 
         # For prior on theta
-        
-        theta = self.encode(x=data['data'], u=params['u'], s=params['s'])
+        if not self.with_s:
+            s = None
+        else:
+            s = params['s']
+        theta = self.encode(x=data['data'], u=params['u'], s=s)
         rv_theta = tfd.Independent(
             tfd.HalfNormal(
                 scale=tf.ones_like(theta, dtype=self.dtype)),
