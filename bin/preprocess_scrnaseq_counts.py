@@ -61,22 +61,32 @@ sc.pp.log1p(adata)
 # sc.pp.highly_variable_genes(adata, min_mean=0.25, max_mean=5, min_disp=1.5)
 sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
 # sc.pl.highly_variable_genes(adata)
-hvgix = adata.var.highly_variable
 
-disp_norm = adata.var.dispersions_norm
-disp_norm.index = np.arange(len(disp_norm))
-disp_norm_sorted = disp_norm.sort_values(ascending=False)
-dispix = disp_norm_sorted.index
-all_gene_names = adata.var_names
-
-# #order: hvgix, then remaining sorted by disp
-# hvgix=hvgix[dispix]
-# newix=pd.concat(disp_norm_sorted.index[hvgix==True], disp_norm_sorted.index[hvgix==False])
-
+# hvgix = adata.var.highly_variable
+# 
+# disp_norm = adata.var.dispersions_norm
+# disp_norm.index = np.arange(len(disp_norm))
+# disp_norm_sorted = disp_norm.sort_values(ascending=False)
+# dispix = disp_norm_sorted.index
+# all_gene_names = adata.var_names
+#
+## #order: hvgix, then remaining sorted by disp
+## hvgix=hvgix[dispix]
+## newix=pd.concat(disp_norm_sorted.index[hvgix==True], disp_norm_sorted.index[hvgix==False])
+#
 # sort the whole matrix by normalized dispersion, then select desired number
-X = X[:, dispix]
-all_gene_names_sorted = all_gene_names[dispix]
+# X = X[:, dispix]
+# all_gene_names_sorted = all_gene_names[dispix]
 
+# store raw and do the hvg filtering
+adata.raw = adata
+adata = adata[:, adata.var.highly_variable]
+
+# regress out
+sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
+
+# scale
+sc.pp.scale(adata, max_value=10)
 
 # Reduce the dimensionality of the data by running principal component analysis (PCA), which reveals the main axes of variation and denoises the data.
 sc.tl.pca(adata, svd_solver='arpack')
@@ -97,8 +107,8 @@ sc.pl.umap(adata)
 X_umap_scanpy=adata.obsm['X_umap']
 
 # save the data
-np.save(datapath+savefile_counts, X)
-np.save(datapath+savefile_genenames, all_gene_names_sorted.to_numpy())
+# np.save(datapath+savefile_counts, X)
+# np.save(datapath+savefile_genenames, all_gene_names_sorted.to_numpy())
 np.save(datapath+savefile_UMAP_scanpy, X_umap_scanpy)
 
 umap_obj = umap.UMAP(n_neighbors=10, n_components=2, n_epochs=1000, 
