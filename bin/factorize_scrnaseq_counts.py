@@ -1,7 +1,3 @@
-# TODO: batching errors? Have weird cell numbers
-# TODO: create X for scRNAseq examples {small easy, medium (preselect HVGs), and full genome}
-# TODO: plot scatter of latent vars (like UMAP??)
-# TODO: output plot of top20 features per latent loading???
 import sys
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -26,7 +22,7 @@ sys.path.append('../')
 
 # load the data
 dataset_name = 'pbmc3k'
-datapath = "C:\\data\\scRNAseq\\" + dataset_name + "\\"
+datapath = "D:\\scRNAseq\\10x\\" + dataset_name + "\\"
 X = np.load(datapath + dataset_name + '_counts.npy')
 gene_names = np.load(datapath + dataset_name +
                      '_genenames.npy', allow_pickle=True)
@@ -82,7 +78,8 @@ print(
 data = tf.data.Dataset.from_tensor_slices(
     {
         'data': X,
-        'indices': np.arange(N)
+        'indices': np.arange(N),
+        'normalization': np.ones(N)
     })
 
 data = data.shuffle(buffer_size=N)
@@ -105,7 +102,7 @@ factor = PoissonMatrixFactorization(
 losses = factor.calibrate_advi(
     num_epochs=500, learning_rate=0.01,
     opt=None, abs_tol=1e-10, rel_tol=1e-8,
-    clip_value=5., max_decay_steps=25, lr_decay_factor=0.99,
+    clip_value=2.5, max_decay_steps=25, lr_decay_factor=0.99,
     check_every=25, set_expectations=True, sample_size=4
     )
 
@@ -135,3 +132,4 @@ np.save(datapath + dataset_name + '_Z_'+f"{P}"+'.npy', Z)
 np.save(datapath + dataset_name + '_cellscore_'+f"{P}"+'.npy', cell_score)
 np.save(datapath + dataset_name + '_genescore_'+f"{P}"+'.npy', gene_score)
 np.save(datapath + dataset_name + '_interceptscore_'+f"{P}"+'.npy', intercept_score)
+np.save(datapath + dataset_name + '_losses_'+f"{P}"+'.npy', losses)
