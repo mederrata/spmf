@@ -84,7 +84,7 @@ def minimize_distributed(
                 "var_" + str(j): v for j, v in enumerate(trainable_variables)
             })
         manager = tf.train.CheckpointManager(
-            checkpoint, './.tf_ckpts',
+            checkpoint, f'./.tf_ckpts/{checkpoint_name}/',
             checkpoint_name=checkpoint_name, max_to_keep=3)
 
         @tf.function
