@@ -33,8 +33,6 @@ X_column_sums = (X>0).sum(0)
 # X=X[:,X_column_sums>20]
 
 P = 3
-panels=(1,P)
-
 D = X.shape[1]
 # N_BATCHES = 7
 # BATCH_SIZE = int(np.floor(X.shape[0]/N_BATCHES))

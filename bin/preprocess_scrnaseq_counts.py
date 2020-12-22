@@ -9,7 +9,7 @@ sc.settings.verbosity = 2
 
 # load a dataset
 dataset_name = 'pbmc3k'
-datapath = "C:\\data\\scRNAseq\\" + dataset_name + "\\"
+datapath = "D:\\scRNAseq\\10x\\" + dataset_name + "\\"
 savefile_counts = dataset_name + '_counts.npy'
 savefile_genenames = dataset_name + '_genenames.npy'
 savefile_UMAP_scanpy = dataset_name + '_UMAP_scanpy.npy'
@@ -53,6 +53,7 @@ sc.pp.filter_genes(adata, min_cells=3)
 
 # raw counts
 X = adata.X.todense()
+all_gene_names = adata.var_names
 
 # this is to get HVGs
 sc.pp.normalize_total(adata, target_sum=1e4)
@@ -64,19 +65,21 @@ sc.pp.highly_variable_genes(adata, min_mean=0.0125, max_mean=3, min_disp=0.5)
 
 # hvgix = adata.var.highly_variable
 # 
-# disp_norm = adata.var.dispersions_norm
-# disp_norm.index = np.arange(len(disp_norm))
-# disp_norm_sorted = disp_norm.sort_values(ascending=False)
-# dispix = disp_norm_sorted.index
-# all_gene_names = adata.var_names
+disp_norm = adata.var.dispersions_norm
+disp_norm.index = np.arange(len(disp_norm))
+disp_norm_sorted = disp_norm.sort_values(ascending=False)
+dispix = disp_norm_sorted.index
 #
 ## #order: hvgix, then remaining sorted by disp
 ## hvgix=hvgix[dispix]
 ## newix=pd.concat(disp_norm_sorted.index[hvgix==True], disp_norm_sorted.index[hvgix==False])
 #
 # sort the whole matrix by normalized dispersion, then select desired number
-# X = X[:, dispix]
-# all_gene_names_sorted = all_gene_names[dispix]
+X = X[:, dispix]
+all_gene_names = all_gene_names[dispix]
+
+np.save(datapath+savefile_counts, X)
+np.save(datapath+savefile_genenames, all_gene_names.to_numpy())
 
 # store raw and do the hvg filtering
 adata.raw = adata
@@ -107,19 +110,17 @@ sc.pl.umap(adata)
 X_umap_scanpy=adata.obsm['X_umap']
 
 # save the data
-# np.save(datapath+savefile_counts, X)
-# np.save(datapath+savefile_genenames, all_gene_names_sorted.to_numpy())
 np.save(datapath+savefile_UMAP_scanpy, X_umap_scanpy)
 
-umap_obj = umap.UMAP(n_neighbors=10, n_components=2, n_epochs=1000, 
-                     min_dist=0.1, spread=1.0, verbose=True)
+# umap_obj = umap.UMAP(n_neighbors=10, n_components=2, n_epochs=1000, 
+#                      min_dist=0.1, spread=1.0, verbose=True)
 
-X_umap=umap_obj.fit_transform(X)
+# X_umap=umap_obj.fit_transform(X)
 
-plt.figure()
-hs = plt.scatter(X_umap_scanpy[:,0], X_umap_scanpy[:,1], s=3)
-plt.figure()
-hs = plt.scatter(X_umap[:,0], X_umap[:,1], s=3)
-plt.show()
+# plt.figure()
+# hs = plt.scatter(X_umap_scanpy[:,0], X_umap_scanpy[:,1], s=3)
+# plt.figure()
+# hs = plt.scatter(X_umap[:,0], X_umap[:,1], s=3)
+# plt.show()
 
-np.save(datapath+savefile_UMAP, X_umap)
+# np.save(datapath+savefile_UMAP, X_umap)
