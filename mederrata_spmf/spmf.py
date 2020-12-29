@@ -250,8 +250,9 @@ class PoissonMatrixFactorization(BayesianModel):
             ),
             'v': tfd.Independent(
                 tfd.HalfNormal(
-                    scale=0.1*tf.ones((self.latent_dim, self.feature_dim),
-                                      dtype=self.dtype)
+                    scale=0.5/self.latent_dim*tf.ones(
+                        (self.latent_dim, self.feature_dim),
+                        dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
             )}
         if self.with_w:
