@@ -86,7 +86,7 @@ def minimize_distributed(
         manager = tf.train.CheckpointManager(
             checkpoint, f'./.tf_ckpts/{checkpoint_name}/',
             checkpoint_name=checkpoint_name, max_to_keep=3)
-
+        save_path = manager.save()
         @tf.function
         def train_step(data):
             with tf.GradientTape() as tape:

@@ -16,7 +16,7 @@ def main():
     # Test taking in from tf.dataset, don't pre-batch
     data = tf.data.Dataset.from_tensor_slices(
         {
-            'data': np.random.poisson(1.0, size=(N, D)),
+            'counts': np.random.poisson(1.0, size=(N, D)),
             'indices': np.arange(N),
             'normalization': np.ones(N)
         })
