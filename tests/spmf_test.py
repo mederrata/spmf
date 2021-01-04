@@ -5,7 +5,7 @@ import dill as pickle
 
 from mederrata_spmf import PoissonMatrixFactorization
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 def main():
@@ -43,10 +43,10 @@ def main():
     waic = factor.waic()
     print(waic)
 
-    plt.imshow(factor.encoding_matrix().numpy(), cmap="Greens", vmin=0)
-    plt.show()
-    plt.imshow(factor.intercept_matrix().numpy(), cmap="Greens", vmin=0)
-    plt.show()
+    #plt.imshow(factor.encoding_matrix().numpy(), cmap="Greens", vmin=0)
+    # plt.show()
+    #plt.imshow(factor.intercept_matrix().numpy(), cmap="Greens", vmin=0)
+    # plt.show()
 
 
 if __name__ == "__main__":
