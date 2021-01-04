@@ -128,19 +128,40 @@ class PoissonMatrixFactorization(BayesianModel):
                 self.eta_i = tf.cast(
                     column_norms, self.dtype)
             else:
-                self.eta_i = tf.reduce_mean(
-                    tf.cast(counts, self.dtype), axis=0, keepdims=True) # eta_i
-            
-        if scale_rows:
-            # xi_u = \sum y_{ui} / (\sum\sum y_{ui}/U) 
-            # we compute here the denominator term that we use globally for normalization
-            # note that if 'nornalization' is given as a key in the data, we ignore this quantity
-            total_sum = tf.reduce_sum(
-                    tf.cast(counts, self.dtype)
-                    )
-            U = tf.cast(counts.shape[0], self.dtype)
-            self.xi_u_global = total_sum/U
-                
+                print("Looping through the entire dataset once to get some stats")
+
+                colsums = []
+                col_nonzero_Ns = []
+                N = 0
+                for batch in iter(data):
+                    colsums += [tf.reduce_sum(batch['counts'],
+                                              axis=0, keepdims=True)]
+                    col_nonzero_Ns += [
+                        tf.reduce_sum(
+                            tf.cast(batch['counts'] > 0, tf.float32),
+                            axis=0, keepdims=True)
+                    ]
+                    N += batch['counts'].shape[0]
+
+                colsums = tf.add_n(colsums)
+                col_nonzero_N = tf.add_n(col_nonzero_Ns)
+                colmeans = colsums/N
+                colmeans_nonzero = (
+                    tf.cast(colsums, tf.float64) /
+                    tf.cast(col_nonzero_N, tf.float64))
+                rowmean = tf.reduce_sum(colmeans)
+                rowmean_nonzero = tf.cast(
+                    tf.reduce_sum(colmeans_nonzero), tf.float64)
+                columns = colmeans.shape[-1]
+
+                self.eta_i = tf.where(
+                    colmeans_nonzero > 1,
+                    colmeans_nonzero,
+                    tf.ones_like(colmeans_nonzero))
+
+            if scale_rows:
+                self.xi_u_global = rowmean_nonzero
+
         self.feature_dim = counts.shape[-1]
         self.latent_dim = self.feature_dim if (
             latent_dim) is None else latent_dim
@@ -178,7 +199,7 @@ class PoissonMatrixFactorization(BayesianModel):
 
         return rv_poisson.log_prob(
             tf.cast(data['counts'], self.dtype))
-        
+
     # @tf.function
     def log_likelihood(
             self, s, u, v, w, data, *args, **kwargs):
@@ -587,7 +608,7 @@ class PoissonMatrixFactorization(BayesianModel):
             xi_u = tf.reduce_sum(
                 tf.cast(
                     x, self.dtype), axis=-1, keepdims=True
-                )/self.xi_u_global
+            )/self.xi_u_global
             z *= xi_u
         return z
 
@@ -634,7 +655,7 @@ class PoissonMatrixFactorization(BayesianModel):
             return tf.zeros(
                 (1, self.feature_dim),
                 dtype=self.dtype)
-            
+
         w = self.calibrated_expectations['w'] if w is None else w
         if self.with_s:
             s = self.calibrated_expectations['s'] if s is None else s
