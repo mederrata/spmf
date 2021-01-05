@@ -37,6 +37,7 @@ setuptools.setup(
     install_requires=[
         'dill>=0.3.1.1',
         'matplotlib>=3.1',
+        'arviz>=0.10.0',
         'numpy>=1.17',
         'pandas>=1.0.0, <1.2.0',
         'scipy>=1.4.1', #We need to check for direct depends or we can delete scipy.

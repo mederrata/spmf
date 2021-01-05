@@ -1,7 +1,7 @@
 import inspect
 from itertools import cycle
 import dill
-import weakref
+import arviz as az
 
 import tensorflow as tf
 
