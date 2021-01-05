@@ -83,7 +83,7 @@ def main():
     csv_data = csv_data0.map(
         lambda j, *x: {
             'indices': j,
-            'data': tf.squeeze(tf.stack(x, axis=-1))
+            'counts': tf.squeeze(tf.stack(x, axis=-1))
         })
 
     # Grab a batch to compute statistics
@@ -91,8 +91,8 @@ def main():
     batch_sizes = []
     N = 0
     for batch in iter(csv_data.batch(_BATCH_SIZE, drop_remainder=False)):
-        colsums += [tf.reduce_sum(batch['data'], axis=0, keepdims=True)]
-        N += batch['data'].shape[0]
+        colsums += [tf.reduce_sum(batch['counts'], axis=0, keepdims=True)]
+        N += batch['counts'].shape[0]
 
     colsums = tf.add_n(colsums)
     colmeans = colsums/N
@@ -102,7 +102,7 @@ def main():
         csv_data = csv_data0.map(
             lambda j, *x: {
                 'indices': j,
-                'data': tf.squeeze(tf.stack(x, axis=-1)),
+                'counts': tf.squeeze(tf.stack(x, axis=-1)),
                 'normalization': tf.reduce_max([
                     tf.reduce_sum(x), 1.])/rowmean
             })
@@ -162,7 +162,7 @@ def main():
                     (
                         tf.squeeze(surrogate_samples['w'])
                         * weights[:, -1, :]
-                        * factor.column_norm_factor
+                        * factor.eta_i
                     ).numpy().T})
     else:
         intercept_data = az.convert_to_inference_data(
@@ -170,7 +170,7 @@ def main():
                 r"":
                     (
                         tf.squeeze(surrogate_samples['w'])
-                        * factor.column_norm_factor).numpy().T})
+                        * factor.eta_i).numpy().T})
 
     fig.colorbar(pcm, ax=ax[0], orientation="vertical")
     az.plot_forest(intercept_data, ax=ax[1])
