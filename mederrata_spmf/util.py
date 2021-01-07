@@ -1,6 +1,7 @@
 import functools
 import inspect
 import uuid
+from collections import defaultdict
 
 import numpy as np
 
@@ -47,7 +48,7 @@ def minimize_distributed(
         decay_rate=0.95,
         checkpoint_name=None,
         max_initialization_steps=1000,
-        tf_dataset=None,
+        batched_dataset=None,
         data_input_signature=None,
         processing_fn=None,
         clip_value=5.,
@@ -65,7 +66,7 @@ def minimize_distributed(
             return loss/tf.cast(N, loss.dtype)
 
         train_dist_dataset = strategy.experimental_distribute_dataset(
-            tf_dataset)
+            batched_dataset)
         iterator = iter(train_dist_dataset)
 
         learning_rate = 1.0 if learning_rate is None else learning_rate
@@ -88,6 +89,7 @@ def minimize_distributed(
             checkpoint, f'./.tf_ckpts/{checkpoint_name}/',
             checkpoint_name=checkpoint_name, max_to_keep=3)
         save_path = manager.save()
+
         @tf.function
         def train_step(data):
             with tf.GradientTape() as tape:
@@ -198,17 +200,15 @@ def minimize_distributed(
                     else:
                         status = "We are in a loss plateau"
                         status += f" learning rate: {optimizer.lr}"
-                        # status += f" loss: {batch_normalized_loss(data=next(iter(tf_dataset)))}"
                         print(status)
                         cp_status = checkpoint.restore(
                             manager.latest_checkpoint)
                         cp_status.assert_consumed()
-                        if tf_dataset is None:
+                        if batched_dataset is None:
                             status = "Restoring from a checkpoint"
                             # status += f"loss: {loss_fn()}"
                         else:
                             status = "Restoring from a checkpoint"
-                            # status += f"{batch_normalized_loss(data=next(iter(tf_dataset)))}"
                         print(status)
                         batches_since_checkpoint = 0
                         batches_since_plateau = 0
@@ -255,7 +255,7 @@ def batched_minimize(loss_fn,
                      decay_rate=0.95,
                      checkpoint_name=None,
                      max_initialization_steps=1000,
-                     tf_dataset=None,
+                     batched_dataset=None,
                      processing_fn=None,
                      name='minimize',
                      clip_value=10.,
@@ -288,9 +288,9 @@ def batched_minimize(loss_fn,
             watch_accessed_variables=trainable_variables is None) as tape:
         for v in trainable_variables or []:
             tape.watch(v)
-        if tf_dataset is not None:
+        if batched_dataset is not None:
             loss = batch_normalized_loss(
-                data=next(iter(tf_dataset)))
+                data=next(iter(batched_dataset)))
         else:
             loss = loss_fn()
     watched_variables = tape.watched_variables()
@@ -304,7 +304,7 @@ def batched_minimize(loss_fn,
         checkpoint_name=checkpoint_name, max_to_keep=3)
 
     @tf.function(autograph=False)
-    def train_loop_body(old_result, step, data=None):  # pylint: disable=unused-argument
+    def train_loop_body(old_result, step, data=None):
         """Run a single optimization step."""
         with tf.GradientTape(
                 watch_accessed_variables=trainable_variables is None) as tape:
@@ -367,9 +367,9 @@ def batched_minimize(loss_fn,
         min_loss = 1e10
         min_state = None
         # Test the first step, and make sure we can initialize safely
-        if tf_dataset is not None:
-            assert isinstance(tf_dataset, tf.data.Dataset)
-            data = next(iter(tf_dataset))
+        if batched_dataset is not None:
+            assert isinstance(batched_dataset, tf.data.Dataset)
+            data = next(iter(batched_dataset))
             if processing_fn is not None:
                 data = processing_fn(data)
             loss = batch_normalized_loss(data=data)
@@ -388,20 +388,21 @@ def batched_minimize(loss_fn,
         accepted_batches = 0
         num_resets = 0
         while (step < num_epochs) and not converged:
-            if tf_dataset is None:
+            if batched_dataset is None:
                 losses += [
                     train_loop_body(state_initializer, step)
                 ]
             else:
                 batch_losses = []
-                for data in tf_dataset:
+                for data in batched_dataset:
                     if processing_fn is not None:
                         data = processing_fn(data)
                     batch_loss = train_loop_body(
-                            state_initializer, step, data
-                        )
+                        state_initializer, step, data
+                    )
                     if not np.isfinite(batch_loss.numpy()):
-                        cp_status = checkpoint.restore(manager.latest_checkpoint)
+                        cp_status = checkpoint.restore(
+                            manager.latest_checkpoint)
                         cp_status.assert_consumed()
 
                         batch_loss = train_loop_body(
@@ -419,7 +420,8 @@ def batched_minimize(loss_fn,
             deviation = tf.math.reduce_std(batch_losses)
             rel = deviation/loss
             print(
-                f"Epoch {step}: average-batch loss: {loss} last batch loss: {batch_loss}")
+                f"Epoch {step}: average-batch loss:"
+                + f"{loss} last batch loss: {batch_loss}")
 
             if True:  # step % check_every == 0:
 
@@ -429,7 +431,7 @@ def batched_minimize(loss_fn,
                     cp_status = checkpoint.restore(manager.latest_checkpoint)
                     cp_status.assert_consumed()
 
-                    #raise ArithmeticError(
+                    # raise ArithmeticError(
                     #    "We are NaN, restored the last checkpoint")
                     print("Got NaN, restoring a checkpoint")
                     decay_step += 1
@@ -450,18 +452,18 @@ def batched_minimize(loss_fn,
                         )
                     else:
                         status = "We are in a loss plateau"
-                        status += f" learning rate: {optimizer.lr}"
-                        status += f" loss: {batch_normalized_loss(data=next(iter(tf_dataset)))}"
+                        status += f" learning rate: {optimizer.lr} loss: "
+                        status += f"{batch_normalized_loss(data=next(iter(batched_dataset)))}"
                         print(status)
                         # cp_status = checkpoint.restore(
                         #    manager.latest_checkpoint)
                         # cp_status.assert_consumed()
-                        if tf_dataset is None:
+                        if batched_dataset is None:
                             status = "Restoring from a checkpoint - "
                             status += f"loss: {loss_fn()}"
                         else:
                             status = "Restoring from a checkpoint - loss: "
-                            status += f"{batch_normalized_loss(data=next(iter(tf_dataset)))}"
+                            status += f"{batch_normalized_loss(data=next(iter(batched_dataset)))}"
                         print(status)
                         batches_since_checkpoint = 0
                         batches_since_plateau = 0
@@ -814,7 +816,7 @@ def fit_surrogate_posterior(target_log_prob_fn,
                             seed=None,
                             abs_tol=None,
                             rel_tol=None,
-                            tf_dataset=None,
+                            batched_dataset=None,
                             strategy=None,
                             name=None,
                             **kwargs):
@@ -851,7 +853,7 @@ def fit_surrogate_posterior(target_log_prob_fn,
                                 rel_tol=rel_tol,
                                 clip_value=clip_value,
                                 decay_rate=decay_rate,
-                                tf_dataset=tf_dataset,
+                                batched_dataset=batched_dataset,
                                 check_every=check_every,
                                 **kwargs)
     else:
@@ -865,7 +867,7 @@ def fit_surrogate_posterior(target_log_prob_fn,
             abs_tol=abs_tol,
             rel_tol=rel_tol,
             decay_rate=decay_rate,
-            tf_dataset=tf_dataset,
+            batched_dataset=batched_dataset,
             check_every=check_every,
             strategy=strategy,
             **kwargs)

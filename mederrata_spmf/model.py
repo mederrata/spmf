@@ -25,7 +25,7 @@ class BayesianModel(object):
     var_list = []
     bijectors = []
 
-    def __init__(self, data, data_transform_fn=None,
+    def __init__(self, data=None, data_transform_fn=None,
                  strategy=None, *args, **kwargs):
         """Instatiate Model object based on tensorflow dataset
         Arguments:
@@ -37,41 +37,34 @@ class BayesianModel(object):
             AttributeError: [description]
         """
         super(BayesianModel, self).__init__()
+        if data is not None:
+            self.set_data(data, data_transform_fn)
+
+        self.strategy = strategy
+        
+    def set_data(self, data, data_transform_fn=None):
         if isinstance(
-                data, (np.ndarray, np.generic)) or isinstance(
-                    data, pd.DataFrame):
+            data, (np.ndarray, np.generic)) or isinstance(
+                data, pd.DataFrame):
+                
             if isinstance(data, pd.DataFrame):
                 data = data.to_numpy()
-            samples = data.shape[0]
-            data = tf.data.Dataset.zip((
-                tf.data.Dataset.from_tensor_slices(
-                    data
-                ),
-                tf.data.Dataset.from_tensor_slices(
-                    np.arange(samples)
-                ))
-            )
-            data = data.batch(samples)
+                samples = data.shape[0]
+                data = tf.data.Dataset.zip((
+                    tf.data.Dataset.from_tensor_slices(
+                        data
+                    ),
+                    tf.data.Dataset.from_tensor_slices(
+                        np.arange(samples)
+                    ))
+                )
+                data = data.batch(samples)
 
         elif not isinstance(data, tf.data.Dataset):
             raise AttributeError("Need numpy/dataframe or tf.dataset")
 
-        #  self.data = NoDependency(data)
         self.data = data
-
-        #  self.data_transform_fn = NoDependency(data_transform_fn)
         self.data_transform_fn = data_transform_fn
-
-        self.num_batches = tf.data.experimental.cardinality(data)
-        self.current_batch = 0
-
-        #  self.dataset_iterator = NoDependency(iter(data))
-        self.dataset_iterator = iter(data)
-
-        #  self.dataset_cycler = NoDependency(iter(data.repeat()))
-        self.dataset_cycler = iter(data.repeat())
-
-        self.strategy = strategy
 
     #  @tf.function
     def calibrate_advi(
@@ -79,7 +72,11 @@ class BayesianModel(object):
             opt=None, abs_tol=1e-10, rel_tol=1e-8,
             clip_value=5., max_decay_steps=25, lr_decay_factor=0.99,
             check_every=25, set_expectations=True, sample_size=4,
+            data=None, data_batches=25,
             **kwargs):
+        
+        data = self.data if data is None else data
+        # check if data is batched
 
         def run_approximation(num_epochs):
             losses = fit_surrogate_posterior(
@@ -95,7 +92,7 @@ class BayesianModel(object):
                 clip_value=clip_value,
                 check_every=check_every,
                 strategy=self.strategy,
-                tf_dataset=self.data
+                batched_dataset=data
             )
             return(losses)
 
