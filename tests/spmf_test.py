@@ -21,11 +21,12 @@ def main():
             'normalization': np.ones(N)
         })
 
-    data = data.batch(1000)
+    # data = data.batch(1000)
     # strategy = tf.distribute.MirroredStrategy()
     strategy = None
     factor = PoissonMatrixFactorization(
-        data, latent_dim=P, strategy=strategy, with_s=True,
+        data, latent_dim=P, feature_dim=D,
+        strategy=strategy, 
         dtype=tf.float64)
     # Test to make sure sampling works
     sample = factor.joint_prior.sample()
@@ -33,9 +34,9 @@ def main():
     probs = factor.joint_prior.log_prob(sample)
     sample_surrogate = factor.surrogate_distribution.sample(77)
     probs_parts = factor.unormalized_log_prob_parts(
-        **sample_surrogate, data=next(iter(data)))
+        **sample_surrogate, data=next(iter(data.batch(10))))
     prob = factor.unormalized_log_prob(
-        **sample_surrogate,  data=next(iter(data)))
+        **sample_surrogate,  data=next(iter(data.batch(10))))
 
     losses = factor.calibrate_advi(
         num_epochs=20, rel_tol=1e-4, learning_rate=.1)
