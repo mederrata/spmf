@@ -41,12 +41,12 @@ class BayesianModel(object):
             self.set_data(data, data_transform_fn)
 
         self.strategy = strategy
-        
+
     def set_data(self, data, data_transform_fn=None):
         if isinstance(
             data, (np.ndarray, np.generic)) or isinstance(
                 data, pd.DataFrame):
-                
+
             if isinstance(data, pd.DataFrame):
                 data = data.to_numpy()
                 samples = data.shape[0]
@@ -72,11 +72,48 @@ class BayesianModel(object):
             opt=None, abs_tol=1e-10, rel_tol=1e-8,
             clip_value=5., max_decay_steps=25, lr_decay_factor=0.99,
             check_every=25, set_expectations=True, sample_size=4,
-            data=None, data_batches=25,
+            data=None, data_batches=25, prefetch_batches=2,
             **kwargs):
-        
+        """Calibrate using ADVI
+
+        Args:
+            num_epochs (int, optional): [description]. Defaults to 100.
+            learning_rate (float, optional): [description]. Defaults to 0.1.
+            opt ([type], optional): [description]. Defaults to None.
+            abs_tol ([type], optional): [description]. Defaults to 1e-10.
+            rel_tol ([type], optional): [description]. Defaults to 1e-8.
+            clip_value ([type], optional): [description]. Defaults to 5..
+            max_decay_steps (int, optional): [description]. Defaults to 25.
+            lr_decay_factor (float, optional): [description]. Defaults to 0.99.
+            check_every (int, optional): [description]. Defaults to 25.
+            set_expectations (bool, optional): [description]. Defaults to True.
+            sample_size (int, optional): [description]. Defaults to 4.
+            data ([type], optional): [description]. Defaults to None.
+            data_batches (int, optional): Ignored if data is already batched. 
+                Defaults to 25.
+        """
         data = self.data if data is None else data
         # check if data is batched
+        batched = False
+        root = False
+        up = data
+        while (not batched) and (not root):
+            if hasattr(up, "._batch_size"):
+                batch_size = up._batch_size
+                batched = True
+                break
+            if hasattr(up, "._input_dataset"):
+                up = up._input_dataset
+            else:
+                root = True
+
+        if not batched:
+            card = tf.data.experimental.cardinality(data)
+            batch_size = int(np.floor(card/data_batches))
+            data = data.batch(batch_size, drop_remainder=True)
+            # data = data.batch
+
+        data = data.prefetch(2)
 
         def run_approximation(num_epochs):
             losses = fit_surrogate_posterior(
@@ -188,9 +225,32 @@ class BayesianModel(object):
                 k: v for k, v in zip(
                     likelihood_vars, split)} for split in zip(*splits)]
 
-                    
-    def waic(self, data=None, params=None, num_samples=100, num_splits=20):
+    def waic(
+            self, data=None, params=None, num_samples=100,
+            num_splits=20, data_batches=25):
         data = self.data if data is None else data
+        # check if data is batched
+        batched = False
+        root = False
+        up = data
+        while (not batched) and (not root):
+            if hasattr(up, "._batch_size"):
+                batch_size = up._batch_size
+                batched = True
+                break
+            if hasattr(up, "._input_dataset"):
+                up = up._input_dataset
+            else:
+                root = True
+
+        if not batched:
+            card = tf.data.experimental.cardinality(data)
+            batch_size = int(np.floor(card/data_batches))
+            data = data.batch(batch_size, drop_remainder=True)
+            # data = data.batch
+
+        data = data.prefetch(2)
+        
         likelihood_vars = inspect.getfullargspec(
             self.log_likelihood).args[1:]
 

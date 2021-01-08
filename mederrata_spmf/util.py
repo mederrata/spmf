@@ -314,7 +314,8 @@ def batched_minimize(loss_fn,
                 loss = batch_normalized_loss(
                     data=data)
             else:
-                loss = loss_fn()
+                loss = batch_normalized_loss(
+                    next(iter(batched_dataset)))
         watched_variables = tape.watched_variables()
         grads = tape.gradient(loss, watched_variables)
         """
@@ -842,20 +843,22 @@ def fit_surrogate_posterior(target_log_prob_fn,
             strategy=strategy,
             name=name,
             **kwargs)
+        
     if strategy is None:
-        return batched_minimize(complete_variational_loss_fn,
-                                num_epochs=num_epochs,
-                                max_decay_steps=max_decay_steps,
-                                trace_fn=trace_fn,
-                                learning_rate=learning_rate,
-                                trainable_variables=trainable_variables,
-                                abs_tol=abs_tol,
-                                rel_tol=rel_tol,
-                                clip_value=clip_value,
-                                decay_rate=decay_rate,
-                                batched_dataset=batched_dataset,
-                                check_every=check_every,
-                                **kwargs)
+        return batched_minimize(
+            complete_variational_loss_fn,
+            num_epochs=num_epochs,
+            max_decay_steps=max_decay_steps,
+            trace_fn=trace_fn,
+            learning_rate=learning_rate,
+            trainable_variables=trainable_variables,
+            abs_tol=abs_tol,
+            rel_tol=rel_tol,
+            clip_value=clip_value,
+            decay_rate=decay_rate,
+            batched_dataset=batched_dataset,
+            check_every=check_every,
+            **kwargs)
     else:
         return minimize_distributed(
             complete_variational_loss_fn,
