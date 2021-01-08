@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sparse probabilistic PCA using the horseshoe
+"""Sparse probabilistic poisson matrix factorization using the horseshoe
 See main() for usage
 Note that you currently have to babysit the optimization a bit
 """
