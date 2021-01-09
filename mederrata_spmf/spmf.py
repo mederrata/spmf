@@ -14,7 +14,7 @@ from tensorflow.python.data.ops.dataset_ops import BatchDataset
 from tensorflow_probability import distributions as tfd
 
 from mederrata_spmf.model import BayesianModel
-from mederrata_spmf.distributions import SqrtInverseGamma
+from mederrata_spmf.distributions import SqrtInverseGamma, AbsHorseshoe
 from mederrata_spmf.util import (
     build_trainable_InverseGamma_dist, build_trainable_normal_dist,
     run_chain, clip_gradients, build_surrogate_posterior,
@@ -63,6 +63,7 @@ class PoissonMatrixFactorization(BayesianModel):
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, scale_rows=True, log_transform=False,
+            horshoe_plus=True,
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
         Arguments:
@@ -91,6 +92,7 @@ class PoissonMatrixFactorization(BayesianModel):
 
         self.scale_rows = scale_rows
         self.scale_columns = scale_columns
+        self.horseshoe_plus = horshoe_plus
 
         if data is not None:
             self.set_data(data, data_transform_fn)
@@ -224,185 +226,181 @@ class PoissonMatrixFactorization(BayesianModel):
             tf.range(self.latent_dim), self.dtype)[tf.newaxis, ...]
 
         distribution_dict = {
-            'u': lambda u_eta, u_tau: tfd.Independent(
-                tfd.HalfNormal(
-                    scale=u_eta*u_tau*symmetry_breaking_decay
-                ), reinterpreted_batch_ndims=2
-            ),
-            'u_eta': tfd.Independent(
-                tfd.HalfCauchy(
-                    loc=tf.zeros(
-                        (self.feature_dim, self.latent_dim),
-                        dtype=self.dtype),
-                    scale=tf.ones(
-                        (self.feature_dim, self.latent_dim),
-                        dtype=self.dtype)
-                ), reinterpreted_batch_ndims=2
-            ),
-            'u_tau': tfd.Independent(
-                tfd.HalfCauchy(
-                    loc=tf.zeros(
-                        (1, self.latent_dim),
-                        dtype=self.dtype),
-                    scale=tf.ones(
-                        (1, self.latent_dim),
-                        dtype=self.dtype)*self.u_tau_scale
-                ), reinterpreted_batch_ndims=2
-            ),
             'v': tfd.Independent(
                 tfd.HalfNormal(
                     scale=0.25/self.latent_dim*tf.ones(
                         (self.latent_dim, self.feature_dim),
                         dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
-            )}
-
-        distribution_dict['w'] = tfd.Independent(
-            tfd.HalfNormal(
-                scale=tf.ones(
-                    (1, self.feature_dim), dtype=self.dtype)
             ),
-            reinterpreted_batch_ndims=2
-        )
+            'w': tfd.Independent(
+                tfd.HalfNormal(
+                    scale=tf.ones(
+                        (1, self.feature_dim), dtype=self.dtype)
+                ),
+                reinterpreted_batch_ndims=2
+            )
+        }
+        if self.horseshoe_plus:
+            distribution_dict = {
+                **distribution_dict,
+                'u': lambda u_eta, u_tau: tfd.Independent(
+                    tfd.HalfNormal(
+                        scale=u_eta*u_tau*symmetry_breaking_decay
+                    ), reinterpreted_batch_ndims=2
+                ),
+                'u_eta': tfd.Independent(
+                    tfd.HalfCauchy(
+                        loc=tf.zeros(
+                            (self.feature_dim, self.latent_dim),
+                            dtype=self.dtype),
+                        scale=tf.ones(
+                            (self.feature_dim, self.latent_dim),
+                            dtype=self.dtype)
+                    ), reinterpreted_batch_ndims=2
+                ),
+                'u_tau': tfd.Independent(
+                    tfd.HalfCauchy(
+                        loc=tf.zeros(
+                            (1, self.latent_dim),
+                            dtype=self.dtype),
+                        scale=tf.ones(
+                            (1, self.latent_dim),
+                            dtype=self.dtype)*self.u_tau_scale
+                    ), reinterpreted_batch_ndims=2
+                ),
+            }
+            distribution_dict['s'] = lambda s_eta, s_tau: tfd.Independent(
+                tfd.HalfNormal(
+                    scale=s_eta*s_tau
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['s_eta'] = tfd.Independent(
+                tfd.HalfCauchy(
+                    loc=tf.zeros(
+                        (2, self.feature_dim),
+                        dtype=self.dtype),
+                    scale=tf.ones(
+                        (2, self.feature_dim),
+                        dtype=self.dtype)
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['s_tau'] = tfd.Independent(
+                tfd.HalfCauchy(
+                    loc=tf.zeros((1, self.feature_dim), dtype=self.dtype),
+                    scale=tf.ones(
+                        (1, self.feature_dim),
+                        dtype=self.dtype)*self.s_tau_scale
+                ), reinterpreted_batch_ndims=2
+            )
 
-        distribution_dict['s'] = lambda s_eta, s_tau: tfd.Independent(
-            tfd.HalfNormal(
-                scale=s_eta*s_tau
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['s_eta'] = tfd.Independent(
-            tfd.HalfCauchy(
-                loc=tf.zeros(
-                    (2, self.feature_dim),
-                    dtype=self.dtype),
-                scale=tf.ones(
-                    (2, self.feature_dim),
-                    dtype=self.dtype)
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['s_tau'] = tfd.Independent(
-            tfd.HalfCauchy(
-                loc=tf.zeros((1, self.feature_dim), dtype=self.dtype),
-                scale=tf.ones(
-                    (1, self.feature_dim),
-                    dtype=self.dtype)*self.s_tau_scale
-            ), reinterpreted_batch_ndims=2
-        )
+            self.bijectors['u_eta_a'] = tfb.Softplus()
+            self.bijectors['u_tau_a'] = tfb.Softplus()
 
-        self.bijectors['u_eta_a'] = tfb.Softplus()
-        self.bijectors['u_tau_a'] = tfb.Softplus()
+            self.bijectors['s_eta_a'] = tfb.Softplus()
+            self.bijectors['s_tau_a'] = tfb.Softplus()
 
-        self.bijectors['s_eta_a'] = tfb.Softplus()
-        self.bijectors['s_tau_a'] = tfb.Softplus()
+            distribution_dict['u_eta'] = lambda u_eta_a: tfd.Independent(
+                SqrtInverseGamma(
+                    concentration=0.5*tf.ones(
+                        (self.feature_dim, self.latent_dim),
+                        dtype=self.dtype
+                    ),
+                    scale=1.0/u_eta_a
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['u_eta_a'] = tfd.Independent(
+                tfd.InverseGamma(
+                    concentration=0.5*tf.ones(
+                        (self.feature_dim, self.latent_dim),
+                        dtype=self.dtype
+                    ),
+                    scale=tf.ones(
+                        (self.feature_dim, self.latent_dim),
+                        dtype=self.dtype)
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['u_tau'] = lambda u_tau_a: tfd.Independent(
+                SqrtInverseGamma(
+                    concentration=0.5*tf.ones(
+                        (1, self.latent_dim),
+                        dtype=self.dtype
+                    ),
+                    scale=1.0/u_tau_a
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['u_tau_a'] = tfd.Independent(
+                tfd.InverseGamma(
+                    concentration=0.5*tf.ones(
+                        (1, self.latent_dim), dtype=self.dtype
+                    ),
+                    scale=tf.ones(
+                        (1, self.latent_dim), dtype=self.dtype
+                    )/self.u_tau_scale**2
+                ), reinterpreted_batch_ndims=2
+            )
 
-        distribution_dict['u_eta'] = lambda u_eta_a: tfd.Independent(
-            SqrtInverseGamma(
-                concentration=0.5*tf.ones(
-                    (self.feature_dim, self.latent_dim),
-                    dtype=self.dtype
+            distribution_dict['s_eta'] = lambda s_eta_a: tfd.Independent(
+                SqrtInverseGamma(
+                    concentration=0.5*tf.ones(
+                        (2, self.feature_dim),
+                        dtype=self.dtype
+                    ),
+                    scale=1.0/s_eta_a
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['s_eta_a'] = tfd.Independent(
+                tfd.InverseGamma(
+                    concentration=0.5*tf.ones(
+                        (2, self.feature_dim), dtype=self.dtype
+                    ),
+                    scale=tf.ones((2, self.feature_dim), dtype=self.dtype)
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['s_tau'] = lambda s_tau_a: tfd.Independent(
+                SqrtInverseGamma(
+                    concentration=0.5*tf.ones(
+                        (1, self.feature_dim), dtype=self.dtype
+                    ),
+                    scale=1.0/s_tau_a
+                ), reinterpreted_batch_ndims=2
+            )
+            distribution_dict['s_tau_a'] = tfd.Independent(
+                tfd.InverseGamma(
+                    concentration=0.5*tf.ones(
+                        (1, self.feature_dim), dtype=self.dtype
+                    ),
+                    scale=tf.ones(
+                        (1, self.feature_dim),
+                        dtype=self.dtype)/self.s_tau_scale**2
+                ), reinterpreted_batch_ndims=2
+            )
+        else:
+            distribution_dict = {
+                **distribution_dict,
+                'u': tfd.Independent(
+                    AbsHorseshoe(
+                        scale=(
+                            self.u_tau_scale*symmetry_breaking_decay*tf.ones(
+                                (1, self.latent_dim),
+                                dtype=self.dtype
+                            )
+                        ), reinterpreted_batch_ndims=2
+                    )
                 ),
-                scale=1.0/u_eta_a
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['u_eta_a'] = tfd.Independent(
-            tfd.InverseGamma(
-                concentration=0.5*tf.ones(
-                    (self.feature_dim, self.latent_dim),
-                    dtype=self.dtype
-                ),
-                scale=tf.ones(
-                    (self.feature_dim, self.latent_dim),
-                    dtype=self.dtype)
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['u_tau'] = lambda u_tau_a: tfd.Independent(
-            SqrtInverseGamma(
-                concentration=0.5*tf.ones(
-                    (1, self.latent_dim),
-                    dtype=self.dtype
-                ),
-                scale=1.0/u_tau_a
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['u_tau_a'] = tfd.Independent(
-            tfd.InverseGamma(
-                concentration=0.5*tf.ones(
-                    (1, self.latent_dim), dtype=self.dtype
-                ),
-                scale=tf.ones(
-                    (1, self.latent_dim), dtype=self.dtype
-                )/self.u_tau_scale**2
-            ), reinterpreted_batch_ndims=2
-        )
+                's': tfd.Independent(
+                    AbsHorseshoe(
+                        scale=self.s_tau_scale*tf.ones(
+                            (1, self.feature_dim), dtype=self.dtype
+                        )
+                    ), reinterpreted_batch_ndims=2
+                )
+            }
 
-        distribution_dict['s_eta'] = lambda s_eta_a: tfd.Independent(
-            SqrtInverseGamma(
-                concentration=0.5*tf.ones(
-                    (2, self.feature_dim),
-                    dtype=self.dtype
-                ),
-                scale=1.0/s_eta_a
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['s_eta_a'] = tfd.Independent(
-            tfd.InverseGamma(
-                concentration=0.5*tf.ones(
-                    (2, self.feature_dim), dtype=self.dtype
-                ),
-                scale=tf.ones((2, self.feature_dim), dtype=self.dtype)
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['s_tau'] = lambda s_tau_a: tfd.Independent(
-            SqrtInverseGamma(
-                concentration=0.5*tf.ones(
-                    (1, self.feature_dim), dtype=self.dtype
-                ),
-                scale=1.0/s_tau_a
-            ), reinterpreted_batch_ndims=2
-        )
-        distribution_dict['s_tau_a'] = tfd.Independent(
-            tfd.InverseGamma(
-                concentration=0.5*tf.ones(
-                    (1, self.feature_dim), dtype=self.dtype
-                ),
-                scale=tf.ones(
-                    (1, self.feature_dim),
-                    dtype=self.dtype)/self.s_tau_scale**2
-            ), reinterpreted_batch_ndims=2
-        )
         self.joint_prior = tfd.JointDistributionNamed(
             distribution_dict)
+
         surrogate_dict = {
-            'u': self.bijectors['u'](
-                build_trainable_normal_dist(
-                    -8.*tf.ones((self.feature_dim, self.latent_dim),
-                                dtype=self.dtype),
-                    5e-4*tf.ones((self.feature_dim, self.latent_dim),
-                                 dtype=self.dtype),
-                    2,
-                    strategy=self.strategy
-                )
-            ),
-            'u_eta': self.bijectors['u_eta'](
-                build_trainable_InverseGamma_dist(
-                    3*tf.ones(
-                        (self.feature_dim, self.latent_dim), dtype=self.dtype),
-                    tf.ones(
-                        (self.feature_dim, self.latent_dim), dtype=self.dtype),
-                    2,
-                    strategy=self.strategy
-                )
-            ),
-            'u_tau': self.bijectors['u_tau'](
-                build_trainable_InverseGamma_dist(
-                    3*tf.ones(
-                        (1, self.latent_dim),
-                        dtype=self.dtype),
-                    tf.ones((1, self.latent_dim), dtype=self.dtype),
-                    2,
-                    strategy=self.strategy
-                )
-            ),
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
                     -5*tf.ones(
@@ -413,95 +411,159 @@ class PoissonMatrixFactorization(BayesianModel):
                     2,
                     strategy=self.strategy
                 )
+            ),
+            'w': self.bijectors['w'](
+                build_trainable_normal_dist(
+                    0.5*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    1e-3*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    2,
+                    strategy=self.strategy
+                )
             )
         }
+        if self.horseshoe_plus:
+            surrogate_dict = {
+                **surrogate_dict,
+                'u': self.bijectors['u'](
+                    build_trainable_normal_dist(
+                        -8.*tf.ones((self.feature_dim, self.latent_dim),
+                                    dtype=self.dtype),
+                        5e-4*tf.ones(
+                            (self.feature_dim, self.latent_dim),
+                            dtype=self.dtype),
+                        2,
+                        strategy=self.strategy
+                    )
+                ),
+                'u_eta': self.bijectors['u_eta'](
+                    build_trainable_InverseGamma_dist(
+                        3*tf.ones(
+                            (self.feature_dim, self.latent_dim),
+                            dtype=self.dtype),
+                        tf.ones(
+                            (self.feature_dim, self.latent_dim),
+                            dtype=self.dtype),
+                        2,
+                        strategy=self.strategy
+                    )
+                ),
+                'u_tau': self.bijectors['u_tau'](
+                    build_trainable_InverseGamma_dist(
+                        3*tf.ones(
+                            (1, self.latent_dim),
+                            dtype=self.dtype),
+                        tf.ones((1, self.latent_dim), dtype=self.dtype),
+                        2,
+                        strategy=self.strategy
+                    )
+                ),
 
-        surrogate_dict['w'] = self.bijectors['w'](
-            build_trainable_normal_dist(
-                0.5*tf.ones((1, self.feature_dim), dtype=self.dtype),
-                1e-3*tf.ones((1, self.feature_dim), dtype=self.dtype),
-                2,
-                strategy=self.strategy
-            )
-        )
+            }
 
-        surrogate_dict['s_eta'] = self.bijectors['s_eta'](
-            build_trainable_InverseGamma_dist(
-                tf.ones((2, self.feature_dim), dtype=self.dtype),
-                tf.ones((2, self.feature_dim), dtype=self.dtype),
-                2,
-                strategy=self.strategy
+            surrogate_dict['s_eta'] = self.bijectors['s_eta'](
+                build_trainable_InverseGamma_dist(
+                    tf.ones((2, self.feature_dim), dtype=self.dtype),
+                    tf.ones((2, self.feature_dim), dtype=self.dtype),
+                    2,
+                    strategy=self.strategy
+                )
             )
-        )
-        surrogate_dict['s_tau'] = self.bijectors['s_tau'](
-            build_trainable_InverseGamma_dist(
-                1*tf.ones((1, self.feature_dim), dtype=self.dtype),
-                tf.ones((1, self.feature_dim), dtype=self.dtype),
-                2,
-                strategy=self.strategy
+            surrogate_dict['s_tau'] = self.bijectors['s_tau'](
+                build_trainable_InverseGamma_dist(
+                    1*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    2,
+                    strategy=self.strategy
+                )
             )
-        )
-        surrogate_dict['s'] = self.bijectors['s'](
-            build_trainable_normal_dist(
-                tf.ones(
-                    (2, self.feature_dim), dtype=self.dtype)*tf.cast(
-                        [[-2.], [-1.]], dtype=self.dtype),
-                1e-3*tf.ones(
-                    (2, self.feature_dim), dtype=self.dtype),
-                2,
-                strategy=self.strategy
-            )
-        )
-
-        self.bijectors['u_eta_a'] = tfb.Softplus()
-        self.bijectors['u_tau_a'] = tfb.Softplus()
-        surrogate_dict['u_eta_a'] = self.bijectors['u_eta_a'](
-            build_trainable_InverseGamma_dist(
-                2.*tf.ones(
-                    (self.feature_dim, self.latent_dim),
-                    dtype=self.dtype),
-                tf.ones(
-                    (self.feature_dim, self.latent_dim),
-                    dtype=self.dtype),
-                2,
-                strategy=self.strategy
-            )
-        )
-        surrogate_dict['u_tau_a'] = self.bijectors['u_tau_a'](
-            build_trainable_InverseGamma_dist(
-                2.*tf.ones(
-                    (1, self.latent_dim),
-                    dtype=self.dtype),
-                tf.ones(
-                    (1, self.latent_dim),
-                    dtype=self.dtype)/self.u_tau_scale**2,
-                2,
-                strategy=self.strategy
-            )
-        )
-
-        self.bijectors['s_eta_a'] = tfb.Softplus()
-        self.bijectors['s_tau_a'] = tfb.Softplus()
-        surrogate_dict['s_eta_a'] = self.bijectors['s_eta_a'](
-            build_trainable_InverseGamma_dist(
-                2.*tf.ones(
-                    (2, self.feature_dim), dtype=self.dtype),
-                tf.ones((2, self.feature_dim), dtype=self.dtype),
-                2,
-                strategy=self.strategy
-            )
-        )
-        surrogate_dict['s_tau_a'] = self.bijectors['s_tau_a'](
-            build_trainable_InverseGamma_dist(
-                2.*tf.ones((1, self.feature_dim), dtype=self.dtype),
-                (
+            surrogate_dict['s'] = self.bijectors['s'](
+                build_trainable_normal_dist(
                     tf.ones(
-                        (1, self.feature_dim),
-                        dtype=self.dtype) / self.s_tau_scale**2),
-                2,
-                strategy=self.strategy
+                        (2, self.feature_dim), dtype=self.dtype)*tf.cast(
+                            [[-2.], [-1.]], dtype=self.dtype),
+                    1e-3*tf.ones(
+                        (2, self.feature_dim), dtype=self.dtype),
+                    2,
+                    strategy=self.strategy
+                )
             )
-        )
+
+            self.bijectors['u_eta_a'] = tfb.Softplus()
+            self.bijectors['u_tau_a'] = tfb.Softplus()
+            surrogate_dict['u_eta_a'] = self.bijectors['u_eta_a'](
+                build_trainable_InverseGamma_dist(
+                    2.*tf.ones(
+                        (self.feature_dim, self.latent_dim),
+                        dtype=self.dtype),
+                    tf.ones(
+                        (self.feature_dim, self.latent_dim),
+                        dtype=self.dtype),
+                    2,
+                    strategy=self.strategy
+                )
+            )
+            surrogate_dict['u_tau_a'] = self.bijectors['u_tau_a'](
+                build_trainable_InverseGamma_dist(
+                    2.*tf.ones(
+                        (1, self.latent_dim),
+                        dtype=self.dtype),
+                    tf.ones(
+                        (1, self.latent_dim),
+                        dtype=self.dtype)/self.u_tau_scale**2,
+                    2,
+                    strategy=self.strategy
+                )
+            )
+
+            self.bijectors['s_eta_a'] = tfb.Softplus()
+            self.bijectors['s_tau_a'] = tfb.Softplus()
+            surrogate_dict['s_eta_a'] = self.bijectors['s_eta_a'](
+                build_trainable_InverseGamma_dist(
+                    2.*tf.ones(
+                        (2, self.feature_dim), dtype=self.dtype),
+                    tf.ones((2, self.feature_dim), dtype=self.dtype),
+                    2,
+                    strategy=self.strategy
+                )
+            )
+            surrogate_dict['s_tau_a'] = self.bijectors['s_tau_a'](
+                build_trainable_InverseGamma_dist(
+                    2.*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    (
+                        tf.ones(
+                            (1, self.feature_dim),
+                            dtype=self.dtype) / self.s_tau_scale**2),
+                    2,
+                    strategy=self.strategy
+                )
+            )
+        else:
+            surrogate_dict = {
+                **surrogate_dict,
+                's': self.bijectors['s'](
+                    build_trainable_normal_dist(
+                        tf.ones(
+                            (2, self.feature_dim), dtype=self.dtype)*tf.cast(
+                                [[-2.], [-1.]], dtype=self.dtype),
+                        1e-3*tf.ones(
+                            (2, self.feature_dim), dtype=self.dtype),
+                        2,
+                        strategy=self.strategy
+                    )
+                ),
+                'u': self.bijectors['u'](
+                    build_trainable_normal_dist(
+                        -8.*tf.ones((self.feature_dim, self.latent_dim),
+                                    dtype=self.dtype),
+                        5e-4*tf.ones(
+                            (self.feature_dim, self.latent_dim),
+                            dtype=self.dtype),
+                        2,
+                        strategy=self.strategy
+                    )
+                )
+            }
+
         self.surrogate_distribution = tfd.JointDistributionNamed(
             surrogate_dict
         )

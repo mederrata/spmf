@@ -22,7 +22,9 @@ __all__ = [
     'LogHalfCauchy',
     'SqrtCauchy',
     'SqrtInverseGamma',
-    'FactorizedDistributionMoments'
+    'FactorizedDistributionMoments',
+    'SoftplusHorseshoe',
+    'AbsHorseshoe'
 ]
 
 
@@ -61,7 +63,7 @@ class SoftplusHorseshoe(TransformedDistribution):
         with tf.name_scope(name) as name:
             super(SoftplusHorseshoe, self).__init__(
                 distribution=tfd.Horseshoe(scale=scale),
-                bijector=tfb.softplus,
+                bijector=tfb.Softplus(),
                 validate_args=validate_args,
                 parameters=parameters,
                 name=name)
@@ -69,12 +71,35 @@ class SoftplusHorseshoe(TransformedDistribution):
     @classmethod
     def _params_event_ndims(cls):
         return dict(scale=0)
-    
+
     @property
     def scale(self):
         """Distribution parameter for the
             pre-transformed standard deviation."""
-        return self.distribution.scale  
+        return self.distribution.scale
+
+
+class AbsHorseshoe(TransformedDistribution):
+    def __init__(self, scale, validate_args=False,
+                 allow_nan_stats=True, name="AbsHorseshoe"):
+        parameters = dict(locals())
+        with tf.name_scope(name) as name:
+            super(AbsHorseshoe, self).__init__(
+                distribution=tfd.Horseshoe(scale=scale),
+                bijector=tfb.AbsoluteValue(),
+                validate_args=validate_args,
+                parameters=parameters,
+                name=name)
+
+    @classmethod
+    def _params_event_ndims(cls):
+        return dict(scale=0)
+
+    @property
+    def scale(self):
+        """Distribution parameter for the
+            pre-transformed standard deviation."""
+        return self.distribution.scale
 
 
 class SqrtInverseGamma(TransformedDistribution):
