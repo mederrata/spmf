@@ -40,9 +40,14 @@ setuptools.setup(
         'arviz>=0.10.0',
         'numpy>=1.17',
         'pandas>=1.0.0, <1.2.0',
-        'scipy>=1.4.1', #We need to check for direct depends or we can delete scipy.
+        # We need to check for direct depends or we can delete scipy.
+        'scipy>=1.4.1',
         'tensorflow>=2.4.0',
         'tensorflow-probability>=0.12.1',
-        'tensorflow-addons>=0.12.0'
-        ]
+        'tensorflow-addons>=0.12.0',
+        'bayesianquilts@git+https://github.com/mederrata/bayesianquilts.git#egg=bayesianquilts-0.0.1'
+    ],
+    dependency_links=[
+        "git+https://github.com/mederrata/bayesianquilts.git#egg=bayesianquilts-0.0.1",
+    ]
 )

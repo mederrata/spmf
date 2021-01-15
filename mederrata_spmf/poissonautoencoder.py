@@ -1,4 +1,4 @@
-from mederrata_spmf.dense import DenseHorseshoe
+from bayesianquilts.dense import DenseHorseshoe
 
 from itertools import cycle
 import functools
@@ -9,9 +9,9 @@ import tensorflow_probability as tfp
 from tensorflow.python.data.ops.dataset_ops import BatchDataset
 from tensorflow_probability import distributions as tfd
 
-from mederrata_spmf.model import BayesianModel
-from mederrata_spmf.distributions import SqrtInverseGamma
-from mederrata_spmf.util import (
+from bayesianquilts.model import BayesianModel
+from bayesianquilts.distributions import SqrtInverseGamma
+from bayesianquilts.util import (
     build_trainable_InverseGamma_dist, build_trainable_normal_dist,
     run_chain, clip_gradients, build_surrogate_posterior,
     fit_surrogate_posterior)
