@@ -13,15 +13,12 @@ import tensorflow_probability as tfp
 from tensorflow.python.data.ops.dataset_ops import BatchDataset
 from tensorflow_probability import distributions as tfd
 
-from mederrata_spmf.model import BayesianModel
-from mederrata_spmf.distributions import SqrtInverseGamma, AbsHorseshoe
-from mederrata_spmf.util import (
+from bayesianquilts.model import BayesianModel
+from bayesianquilts.distributions import SqrtInverseGamma, AbsHorseshoe
+from bayesianquilts.util import (
     build_trainable_InverseGamma_dist, build_trainable_normal_dist,
     run_chain, clip_gradients, build_surrogate_posterior,
     fit_surrogate_posterior)
-
-# import tensorflow_transform as tft
-
 
 tfb = tfp.bijectors
 

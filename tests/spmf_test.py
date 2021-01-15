@@ -26,7 +26,7 @@ def main():
     strategy = None
     factor = PoissonMatrixFactorization(
         data, latent_dim=P, feature_dim=D,
-        strategy=strategy, #  horseshoe_plus=False,
+        strategy=strategy,  # horseshoe_plus=False,
         dtype=tf.float64)
     # Test to make sure sampling works
     sample = factor.joint_prior.sample()
