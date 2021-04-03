@@ -1,4 +1,4 @@
-from bayesianquilts.dense import DenseHorseshoe
+from bayesianquilts.nn.dense import DenseHorseshoe
 
 from itertools import cycle
 import functools
