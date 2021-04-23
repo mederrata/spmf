@@ -60,7 +60,7 @@ class PoissonMatrixFactorization(BayesianModel):
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, scale_rows=True, log_transform=False,
-            horshoe_plus=True,
+            horshoe_plus=True, column_norms=None,
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
         Arguments:
@@ -90,9 +90,16 @@ class PoissonMatrixFactorization(BayesianModel):
         self.scale_rows = scale_rows
         self.scale_columns = scale_columns
         self.horseshoe_plus = horshoe_plus
+        self.eta_i = 1.
+        self.xi_u_global = 1.
+        if column_norms is not None:
+            self.eta_i = column_norms
 
         if data is not None:
-            self.set_data(data, data_transform_fn)
+            self.set_data(
+                data, data_transform_fn,
+                compute_normalization=(column_norms is None)
+                )
         if encoder_function is not None:
             self.encoder_function = encoder_function
         if decoder_function is not None:
@@ -100,9 +107,6 @@ class PoissonMatrixFactorization(BayesianModel):
         self.dtype = dtype
         self.symmetry_breaking_decay = symmetry_breaking_decay
         self.log_transform = log_transform
-
-        self.eta_i = 1.
-        self.xi_u_global = 1.
 
         self.feature_dim = feature_dim
         self.latent_dim = self.feature_dim if (
@@ -115,10 +119,10 @@ class PoissonMatrixFactorization(BayesianModel):
         print(
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
 
-    def set_data(self, data, data_transform_fn=None):
+    def set_data(self, data, data_transform_fn=None, compute_normalization=True):
         super(PoissonMatrixFactorization, self).set_data(
             data, data_transform_fn)
-        if self.scale_columns:
+        if self.scale_columns and compute_normalization:
             print("Looping through the entire dataset once to get some stats")
 
             colsums = []
@@ -142,18 +146,16 @@ class PoissonMatrixFactorization(BayesianModel):
             colmeans_nonzero = (
                 tf.cast(colsums, tf.float64) /
                 tf.cast(col_nonzero_N, tf.float64))
-            rowmean = tf.reduce_sum(colmeans)
             rowmean_nonzero = tf.cast(
                 tf.reduce_sum(colmeans_nonzero), tf.float64)
-            columns = colmeans.shape[-1]
 
             self.eta_i = tf.where(
                 colmeans_nonzero > 1,
                 colmeans_nonzero,
                 tf.ones_like(colmeans_nonzero))
 
-        if self.scale_rows:
-            self.xi_u_global = rowmean_nonzero
+            if self.scale_rows:
+                self.xi_u_global = rowmean_nonzero
 
     def log_likelihood_components(
             self, s, u, v, w, data, *args, **kwargs):
