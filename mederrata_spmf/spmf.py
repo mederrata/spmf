@@ -227,7 +227,7 @@ class PoissonMatrixFactorization(BayesianModel):
         distribution_dict = {
             'v': tfd.Independent(
                 tfd.HalfNormal(
-                    scale=0.25/self.latent_dim*tf.ones(
+                    scale=0.1*tf.ones(
                         (self.latent_dim, self.feature_dim),
                         dtype=self.dtype)
                 ), reinterpreted_batch_ndims=2
@@ -425,7 +425,7 @@ class PoissonMatrixFactorization(BayesianModel):
                 **surrogate_dict,
                 'u': self.bijectors['u'](
                     build_trainable_normal_dist(
-                        -8.*tf.ones((self.feature_dim, self.latent_dim),
+                        -6.*tf.ones((self.feature_dim, self.latent_dim),
                                     dtype=self.dtype),
                         5e-4*tf.ones(
                             (self.feature_dim, self.latent_dim),
@@ -637,6 +637,10 @@ class PoissonMatrixFactorization(BayesianModel):
         s = self.calibrated_expectations['s'] if s is None else s
 
         encoding = self.encoding_matrix(u, s)    # A = (\alpha_{ik})
+        try:
+            tf.debugging.check_numerics(encoding, message='Checking encoding')
+        except Exception as e:
+            assert "Checking encoding : Tensor had NaN values" in encoding.message
         z = tf.matmul(
             self.encoder_function(
                 tf.cast(x, self.dtype)
