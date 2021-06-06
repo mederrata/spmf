@@ -396,7 +396,7 @@ class PoissonMatrixFactorization(BayesianModel):
                 )
             }
 
-        self.joint_prior = tfd.JointDistributionNamed(
+        self.prior_distribution = tfd.JointDistributionNamed(
             distribution_dict)
 
         surrogate_dict = {
@@ -595,7 +595,7 @@ class PoissonMatrixFactorization(BayesianModel):
                 self.dataset_iterator = cycle(iter(self.data))
                 data = next(self.dataset_iterator)
 
-        prior_parts = self.joint_prior.log_prob_parts(params)
+        prior_parts = self.prior_distribution.log_prob_parts(params)
         log_likelihood = self.log_likelihood_components(data=data, **params)
 
         # For prior on theta
