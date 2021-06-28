@@ -41,7 +41,7 @@ class PoissonMatrixFactorization(BayesianModel):
         """
         if self.log_transform:
             return tf.math.log(x/self.eta_i+1.)
-        return x/self.eta_i
+        return tf.cast(x, self.dtype)/tf.cast(self.eta_i, self.dtype)
 
     def decoder_function(self, x):
         """Decoder function (f)
@@ -52,7 +52,7 @@ class PoissonMatrixFactorization(BayesianModel):
         """
         if self.log_transform:
             return tf.math.exp(x*self.eta_i)-1.
-        return x*self.eta_i
+        return tf.cast(x, self.dtype)*tf.cast(self.eta_i, self.dtype)
 
     def __init__(
             self, data=None, data_transform_fn=None,
