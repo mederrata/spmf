@@ -149,13 +149,17 @@ class PoissonMatrixFactorization(BayesianModel):
             rowmean_nonzero = tf.cast(
                 tf.reduce_sum(colmeans_nonzero), tf.float64)
 
-            self.eta_i = tf.where(
-                colmeans_nonzero > 1,
-                colmeans_nonzero,
-                tf.ones_like(colmeans_nonzero))
+            self.eta_i = tf.cast(
+                tf.where(
+                    colmeans_nonzero > 1,
+                    colmeans_nonzero,
+                    tf.ones_like(colmeans_nonzero)
+                    ),
+                self.dtype
+                )
 
             if self.scale_rows:
-                self.xi_u_global = rowmean_nonzero
+                self.xi_u_global = tf.cast(rowmean_nonzero, self.dtype)
 
     def log_likelihood_components(
             self, s, u, v, w, data, *args, **kwargs):
