@@ -41,7 +41,7 @@ class PoissonMatrixFactorization(BayesianModel):
         """
         if self.log_transform:
             return tf.math.log(x/self.eta_i+1.)
-        return x/self.eta_i
+        return tf.cast(x, self.dtype)/tf.cast(self.eta_i, self.dtype)
 
     def decoder_function(self, x):
         """Decoder function (f)
@@ -52,7 +52,7 @@ class PoissonMatrixFactorization(BayesianModel):
         """
         if self.log_transform:
             return tf.math.exp(x*self.eta_i)-1.
-        return x*self.eta_i
+        return tf.cast(x, self.dtype)*tf.cast(self.eta_i, self.dtype)
 
     def __init__(
             self, data=None, data_transform_fn=None,
@@ -149,13 +149,17 @@ class PoissonMatrixFactorization(BayesianModel):
             rowmean_nonzero = tf.cast(
                 tf.reduce_sum(colmeans_nonzero), tf.float64)
 
-            self.eta_i = tf.where(
-                colmeans_nonzero > 1,
-                colmeans_nonzero,
-                tf.ones_like(colmeans_nonzero))
+            self.eta_i = tf.cast(
+                tf.where(
+                    colmeans_nonzero > 1,
+                    colmeans_nonzero,
+                    tf.ones_like(colmeans_nonzero)
+                    ),
+                self.dtype
+                )
 
             if self.scale_rows:
-                self.xi_u_global = rowmean_nonzero
+                self.xi_u_global = tf.cast(rowmean_nonzero, self.dtype)
 
     def log_likelihood_components(
             self, s, u, v, w, data, *args, **kwargs):
@@ -396,7 +400,7 @@ class PoissonMatrixFactorization(BayesianModel):
                 )
             }
 
-        self.joint_prior = tfd.JointDistributionNamed(
+        self.prior_distribution = tfd.JointDistributionNamed(
             distribution_dict)
 
         surrogate_dict = {
@@ -595,7 +599,7 @@ class PoissonMatrixFactorization(BayesianModel):
                 self.dataset_iterator = cycle(iter(self.data))
                 data = next(self.dataset_iterator)
 
-        prior_parts = self.joint_prior.log_prob_parts(params)
+        prior_parts = self.prior_distribution.log_prob_parts(params)
         log_likelihood = self.log_likelihood_components(data=data, **params)
 
         # For prior on theta
