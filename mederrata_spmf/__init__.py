@@ -1,2 +1,2 @@
-from .spmf import PoissonMatrixFactorization
-from .poissonautoencoder import PoissonAutoencoder
+from .poisson import PoissonFactorization
+from .poisson import PoissonAutoencoder
