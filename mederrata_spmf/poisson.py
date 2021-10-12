@@ -15,6 +15,8 @@ from tensorflow_probability import distributions as tfd
 
 from bayesianquilts.model import BayesianModel
 from bayesianquilts.distributions import SqrtInverseGamma, AbsHorseshoe
+from bayesianquilts.nn.dense import DenseHorseshoe
+
 from bayesianquilts.util import (
     build_trainable_InverseGamma_dist, build_trainable_normal_dist,
     run_chain, clip_gradients, build_surrogate_posterior,
@@ -23,7 +25,7 @@ from bayesianquilts.util import (
 tfb = tfp.bijectors
 
 
-class PoissonMatrixFactorization(BayesianModel):
+class PoissonFactorization(BayesianModel):
     """Sparse (horseshoe) poisson matrix factorization
     Arguments:
         object {[type]} -- [description]
@@ -79,12 +81,13 @@ class PoissonMatrixFactorization(BayesianModel):
             strategy {[type]} -- For multi-GPU (default: {None})
             decoder_function {[type]} -- f(x) (default: {None})
             encoder_function {[type]} -- g(x) (default: {None})
-            scale_columns {bool} -- Scale the rates by the mean of the first batch (default: {True})
+            scale_columns {bool} -- Scale the rates by the mean of the
+                first batch (default: {True})
             scale_row {bool} -- Scale by normalized row sums (default: {True})
             dtype {[type]} -- [description] (default: {tf.float64})
         """
 
-        super(PoissonMatrixFactorization, self).__init__(
+        super(PoissonFactorization, self).__init__(
             data=None, data_transform_fn=None, strategy=strategy, dtype=dtype)
 
         self.scale_rows = scale_rows
@@ -99,7 +102,7 @@ class PoissonMatrixFactorization(BayesianModel):
             self.set_data(
                 data, data_transform_fn,
                 compute_normalization=(column_norms is None)
-                )
+            )
         if encoder_function is not None:
             self.encoder_function = encoder_function
         if decoder_function is not None:
@@ -119,8 +122,9 @@ class PoissonMatrixFactorization(BayesianModel):
         print(
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
 
-    def set_data(self, data, data_transform_fn=None, compute_normalization=True):
-        super(PoissonMatrixFactorization, self).set_data(
+    def set_data(
+            self, data, data_transform_fn=None, compute_normalization=True):
+        super(PoissonFactorization, self).set_data(
             data, data_transform_fn)
         if self.scale_columns and compute_normalization:
             print("Looping through the entire dataset once to get some stats")
@@ -154,9 +158,9 @@ class PoissonMatrixFactorization(BayesianModel):
                     colmeans_nonzero > 1,
                     colmeans_nonzero,
                     tf.ones_like(colmeans_nonzero)
-                    ),
+                ),
                 self.dtype
-                )
+            )
 
             if self.scale_rows:
                 self.xi_u_global = tf.cast(rowmean_nonzero, self.dtype)
@@ -644,7 +648,9 @@ class PoissonMatrixFactorization(BayesianModel):
         try:
             tf.debugging.check_numerics(encoding, message='Checking encoding')
         except Exception as e:
-            assert "Checking encoding : Tensor had NaN values" in encoding.message
+            assert (
+                "Checking encoding : Tensor had NaN values" 
+                in encoding.message)
         z = tf.matmul(
             self.encoder_function(
                 tf.cast(x, self.dtype)
@@ -723,3 +729,115 @@ class PoissonMatrixFactorization(BayesianModel):
             self.surrogate_distribution.trainable_variables[j].assign(
                 tf.cast(value, self.dtype))
         #  self.set_calibration_expectations()
+
+
+class PoissonAutoencoder(PoissonFactorization):
+    var_list = []
+
+    def __init__(
+            self, data, data_transform_fn=None, latent_dim=None,
+            scale_columns=True, column_norms=None, encoder_layers=1,
+            decoder_layers=1, activation_function=tf.nn.softplus,
+            strategy=None, dtype=tf.float64, **kwargs):
+        """Instantiate unconstrained dense Poisson autoencoder
+
+        Args:
+            data ([type]): [description]
+            data_transform_fn ([type], optional): [description]. 
+                Defaults to None.
+            latent_dim ([type], optional): [description]. Defaults to None.
+            scale_columns (bool, optional): [description]. Defaults to True.
+            column_norms ([type], optional): [description]. Defaults to None.
+            strategy ([type], optional): [description]. Defaults to None.
+            dtype ([type], optional): [description]. Defaults to tf.float64.
+        """
+        super(DenseHorseshoe, self).__init__(
+            data, data_transform_fn, strategy=strategy, dtype=dtype)
+        self.dtype = dtype
+        record = next(iter(data))
+        indices = record['indices']
+        data = record['data']
+        self.column_norm_factor = 1.
+
+        if scale_columns:
+            if column_norms is not None:
+                self.column_norm_factor = tf.cast(
+                    column_norms, self.dtype)
+            else:
+                self.column_norm_factor = tf.reduce_mean(
+                    tf.cast(data, self.dtype), axis=0, keepdims=True)
+
+        if 'normalization' in record.keys():
+            norm = record['normalization']
+        data = tf.cast(data, self.dtype)
+        self.feature_dim = data.shape[-1]
+        self.latent_dim = self.feature_dim if (
+            latent_dim) is None else latent_dim
+
+        self.neural_network_model = DenseHorseshoe(
+            self.feature_dim,
+            [self.feature_dim]*encoder_layers + [self.latent_dim] +
+            [self.feature_dim]*decoder_layers + [self.feature_dim],
+            dtype=self.dtype)
+
+        var_list = self.neural_network_model.var_list
+        self.var_list = var_list
+        # rewrite the log_likelihood signature with the variable names
+        # function_string = f"lambda self, data, 
+        #   {', '.join(var_list)}: 
+        #   self.log_likelihood(
+        #       data, {', '.join([str(v) + '=' + str(v) for v in var_list])})"
+        # self.log_likelihood = eval(function_string, globals(), self.__dict__)
+        self.joint_prior = self.neural_network_model.joint_prior
+        self.surrogate_distribution = build_surrogate_posterior(
+            self.joint_prior, self.neural_network_model.bijectors,
+            dtype=self.dtype,
+            strategy=self.strategy)
+        self.surrogate_vars = self.surrogate_distribution.variables
+
+        self.var_list = list(self.surrogate_distribution.variables)
+
+        self.set_calibration_expectations()
+
+    def log_likelihood(self, data, **params):
+        neural_networks = self.neural_network_model.assemble_networks(params)
+        rates = tf.math.exp(
+            neural_networks(
+                tf.cast(
+                    data['data'],
+                    self.neural_network_model.dtype)
+                / tf.cast(
+                    self.column_norm_factor,
+                    self.neural_network_model.dtype)
+            )
+        )
+        rates = tf.cast(rates, self.dtype)
+        rates *= self.column_norm_factor
+        rv_poisson = tfd.Poisson(rate=rates)
+        log_lik = rv_poisson.log_prob(
+            tf.cast(data['data'], self.dtype)[tf.newaxis, ...])
+        log_lik = tf.reduce_sum(log_lik, axis=-1)
+        log_lik = tf.reduce_sum(log_lik, axis=-1)
+        return log_lik
+
+    def unormalized_log_prob_parts(self, data=None, **params):
+        if data is None:
+            #  use self.data, taking the next batch
+            try:
+                data = next(self.dataset_cycler)
+            except tf.errors.OutOfRangeError:
+                self.dataset_iterator = cycle(iter(self.data))
+                data = next(self.dataset_iterator)
+
+        prior_parts = self.neural_network_model.joint_prior.log_prob_parts(
+            params)
+        log_likelihood = self.log_likelihood(data, **params)
+        prior_parts['x'] = log_likelihood
+        return prior_parts
+
+    def unormalized_log_prob(self, data=None, **params):
+        prob_parts = self.unormalized_log_prob_parts(
+            data, **params)
+        value = tf.add_n(
+            list(prob_parts.values()))
+        return value
