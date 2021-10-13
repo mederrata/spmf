@@ -45,9 +45,9 @@ setuptools.setup(
         'tensorflow>=2.4.0',
         'tensorflow-probability>=0.12.1',
         'tensorflow-addons>=0.12.0',
-        'bayesianquilts@git+https://github.com/mederrata/bayesianquilts.git#egg=bayesianquilts-0.0.1'
+        'bayesianquilts@git+https://github.com/mederrata/bayesianquilts.git'
     ],
     dependency_links=[
-        "git+https://github.com/mederrata/bayesianquilts.git#egg=bayesianquilts-0.0.1",
+        "git+https://github.com/mederrata/bayesianquilts.git",
     ]
 )
