@@ -6,8 +6,6 @@ from numpy.testing import (assert_equal, assert_array_equal,
 
 import tensorflow as tf
 import numpy as np
-import scipy as sp
-
 
 class TestTensorFlowMethods(unittest.TestCase):
     def test_gpu_exists(self):
