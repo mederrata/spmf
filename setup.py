@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="mederrata-spmf",
-    version="0.0.1",
+    version="0.0.2",
     author="mederrata",
     author_email="info@mederrata.com",
     description="mederrata sparse poisson matrix factorization tools",
