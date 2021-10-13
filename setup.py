@@ -38,7 +38,7 @@ setuptools.setup(
         'dill>=0.3.1.1',
         'matplotlib>=3.1',
         'arviz>=0.10.0',
-        'numpy~=1.9.2',
+        'numpy~=1.19.2',
         'pandas>=1.0.0, <1.2.0',
         'tensorflow~=2.5.0',
         'tensorflow-probability~=0.13.0',
