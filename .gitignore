@@ -133,3 +133,4 @@ dmypy.json
 #scanpy cache directory
 /cache
 .DS_Store
+*.pkl
