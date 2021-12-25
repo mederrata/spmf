@@ -123,9 +123,9 @@ class PoissonFactorization(BayesianModel):
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
 
     def set_data(
-            self, data, data_transform_fn=None, compute_normalization=True):
+            self, data, data_transform_fn=None, compute_normalization=True, n=None):
         super(PoissonFactorization, self).set_data(
-            data, data_transform_fn)
+            data=data, data_transform_fn=data_transform_fn, n=n)
         if self.scale_columns and compute_normalization:
             print("Looping through the entire dataset once to get some stats")
 
@@ -164,6 +164,8 @@ class PoissonFactorization(BayesianModel):
 
             if self.scale_rows:
                 self.xi_u_global = tf.cast(rowmean_nonzero, self.dtype)
+            else:
+                self.xi_u_global = 1.
 
     def log_likelihood_components(
             self, s, u, v, w, data, *args, **kwargs):
