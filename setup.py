@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="mederrata-spmf",
-    version="0.0.3",
+    version="0.0.4",
     author="mederrata",
     author_email="info@mederrata.com",
     description="mederrata sparse poisson matrix factorization tools",
@@ -40,9 +40,9 @@ setuptools.setup(
         'arviz>=0.10.0',
         'numpy~=1.19.2',
         'pandas>=1.0.0, <1.2.0',
-        'tensorflow~=2.6.0',
-        'tensorflow-probability~=0.14.0',
-        'tensorflow-addons~=0.14.0',
+        'tensorflow>=2.6.1',
+        'tensorflow-probability>=0.14.0',
+        'tensorflow-addons>=0.14.0',
         'bayesianquilts@git+https://github.com/mederrata/bayesianquilts.git'
     ],
     dependency_links=[
