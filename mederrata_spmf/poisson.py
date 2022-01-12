@@ -62,7 +62,7 @@ class PoissonFactorization(BayesianModel):
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, scale_rows=True, log_transform=False,
-            horshoe_plus=True, column_norms=None,
+            horshoe_plus=True, column_norms=None, count_key='counts',
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
         Arguments:
@@ -117,6 +117,7 @@ class PoissonFactorization(BayesianModel):
 
         self.u_tau_scale = u_tau_scale
         self.s_tau_scale = s_tau_scale
+        self.count_key = count_key
 
         self.create_distributions()
         print(
@@ -135,14 +136,14 @@ class PoissonFactorization(BayesianModel):
             for batch in iter(data):
                 colsums += [
                     tf.reduce_sum(
-                        batch['counts'],
+                        batch[self.count_key],
                         axis=0, keepdims=True)]
                 col_nonzero_Ns += [
                     tf.reduce_sum(
-                        tf.cast(batch['counts'] > 0, tf.float32),
+                        tf.cast(batch[self.count_key] > 0, tf.float32),
                         axis=0, keepdims=True)
                 ]
-                N += batch['counts'].shape[0]
+                N += batch[self.count_key].shape[0]
 
             colsums = tf.add_n(colsums)
             col_nonzero_N = tf.add_n(col_nonzero_Ns)
@@ -181,7 +182,7 @@ class PoissonFactorization(BayesianModel):
             [tf.Tensor] -- log likelihood in broadcasted shape
         """
 
-        theta_u = self.encode(data['counts'], u, s)
+        theta_u = self.encode(data[self.count_key], u, s)
         phi = self.intercept_matrix(w, s)
         B = self.decoding_matrix(v)
 
@@ -192,7 +193,7 @@ class PoissonFactorization(BayesianModel):
         rv_poisson = tfd.Poisson(rate=rate)
 
         return rv_poisson.log_prob(
-            tf.cast(data['counts'], self.dtype))
+            tf.cast(data[self.count_key], self.dtype))
 
     # @tf.function
     def log_likelihood(
@@ -611,7 +612,7 @@ class PoissonFactorization(BayesianModel):
         # For prior on theta
 
         s = params['s']
-        theta = self.encode(x=data['counts'], u=params['u'], s=s)
+        theta = self.encode(x=data[self.count_key], u=params['u'], s=s)
         rv_theta = tfd.Independent(
             tfd.HalfNormal(
                 scale=tf.ones_like(theta, dtype=self.dtype)),
