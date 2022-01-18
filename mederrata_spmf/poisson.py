@@ -97,6 +97,7 @@ class PoissonFactorization(BayesianModel):
         self.xi_u_global = 1.
         if column_norms is not None:
             self.eta_i = column_norms
+        self.count_key = count_key
 
         if data is not None:
             self.set_data(
@@ -117,7 +118,6 @@ class PoissonFactorization(BayesianModel):
 
         self.u_tau_scale = u_tau_scale
         self.s_tau_scale = s_tau_scale
-        self.count_key = count_key
 
         self.create_distributions()
         print(
