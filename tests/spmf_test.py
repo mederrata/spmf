@@ -10,8 +10,8 @@ from mederrata_spmf import PoissonFactorization
 
 def main():
     N = 50000
-    D = 3000
-    P = 80
+    D = 3500
+    P = 250
 
     # Test taking in from tf.dataset, don't pre-batch
     data = tf.data.Dataset.from_tensor_slices(
@@ -39,16 +39,10 @@ def main():
         **sample_surrogate,  data=next(iter(data)))
 
     losses = factor.calibrate_advi(
-        num_epochs=20, rel_tol=1e-4, learning_rate=.1)
+        num_epochs=20, rel_tol=1e-4, learning_rate=.005)
 
     waic = factor.waic()
     print(waic)
-
-    #plt.imshow(factor.encoding_matrix().numpy(), cmap="Greens", vmin=0)
-    # plt.show()
-    #plt.imshow(factor.intercept_matrix().numpy(), cmap="Greens", vmin=0)
-    # plt.show()
-
 
 if __name__ == "__main__":
     main()

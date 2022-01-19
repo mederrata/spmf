@@ -66,24 +66,25 @@ class PoissonFactorization(BayesianModel):
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
         Arguments:
-            data {[type]} -- a BatchDataset object that
+            data {tf.data.Dataset} -- a BatchDataset object that
                              we will iterate for training
                               (default: {None})
         Keyword Arguments:
-            data_transform_fn {[type]} -- Not currently used,
+            data_transform_fn {function} -- Not currently used,
                 but intended to allow for specification
                 of a preprocessing function (default: {None})
-            latent_dim {[type]} -- P (default: {None})
-            u_tau_scale {[type]} -- Global shrinkage scale on u (default: {1.})
+            latent_dim {int]} -- P (default: {None})
+            u_tau_scale {float} -- Global shrinkage scale on u (default: {1.})
             s_tau_scale {int} -- Global shrinkage scale on s (default: {1})
             symmetry_breaking_decay {float} -- Decay factor along dimensions
                                                 on u (default: {0.5})
-            strategy {[type]} -- For multi-GPU (default: {None})
-            decoder_function {[type]} -- f(x) (default: {None})
-            encoder_function {[type]} -- g(x) (default: {None})
+            strategy {tf.strategy} -- For multi-GPU (default: {None})
+            decoder_function {function} -- f(x) (default: {lambda x: x/scale})
+            encoder_function {function} -- g(x) (default: {lambda x: x/scale})
             scale_columns {bool} -- Scale the rates by the mean of the
                 first batch (default: {True})
             scale_row {bool} -- Scale by normalized row sums (default: {True})
+            horseshe_plus {bool} -- Whether to use hierarchical horseshoe plus (default : {True})
             dtype {[type]} -- [description] (default: {tf.float64})
         """
 
