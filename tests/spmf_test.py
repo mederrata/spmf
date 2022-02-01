@@ -3,15 +3,15 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import dill as pickle
 
-from mederrata_spmf import PoissonMatrixFactorization
+from mederrata_spmf import PoissonFactorization
 
 # import matplotlib.pyplot as plt
 
 
 def main():
-    N = 50000
-    D = 30
-    P = 4
+    N = 500000
+    D = 350
+    P = 50
 
     # Test taking in from tf.dataset, don't pre-batch
     data = tf.data.Dataset.from_tensor_slices(
@@ -21,33 +21,24 @@ def main():
             'normalization': np.ones(N)
         })
 
-    # data = data.batch(1000)
-    # strategy = tf.distribute.MirroredStrategy()
-    strategy = None
-    factor = PoissonMatrixFactorization(
-        data, latent_dim=P, feature_dim=D,
-        strategy=strategy,  # horseshoe_plus=False,
+    def data_factory(batch_size=10000):
+        ds = data.shuffle(10000)
+        ds = ds.batch(batch_size)
+        return ds
+
+    factor = PoissonFactorization(
+        latent_dim=P, feature_dim=D, u_tau_scale=1.0/np.sqrt(N*D),
         dtype=tf.float64)
-    # Test to make sure sampling works
-    sample = factor.joint_prior.sample()
-    # Compute the joint log probability of the sample
-    probs = factor.joint_prior.log_prob(sample)
-    sample_surrogate = factor.surrogate_distribution.sample(77)
-    probs_parts = factor.unormalized_log_prob_parts(
-        **sample_surrogate, data=next(iter(data.batch(10))))
-    prob = factor.unormalized_log_prob(
-        **sample_surrogate,  data=next(iter(data.batch(10))))
 
-    losses = factor.calibrate_advi(
-        num_epochs=20, rel_tol=1e-4, learning_rate=.1)
+    factor.compute_scales(data_factory=data_factory)
 
-    waic = factor.waic()
-    print(waic)
-
-    #plt.imshow(factor.encoding_matrix().numpy(), cmap="Greens", vmin=0)
-    # plt.show()
-    #plt.imshow(factor.intercept_matrix().numpy(), cmap="Greens", vmin=0)
-    # plt.show()
+    losses = factor.fit(
+        data_factory=data_factory,
+        sample_size=20,
+        num_epochs=20,
+        rel_tol=1e-4,
+        learning_rate=.01)
+    print(losses)
 
 
 if __name__ == "__main__":
