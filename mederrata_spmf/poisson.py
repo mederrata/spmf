@@ -112,17 +112,15 @@ class PoissonFactorization(BayesianModel):
         print(
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
 
-    def set_data(
-            self, data, data_transform_fn=None, compute_normalization=True, n=None):
-        super(PoissonFactorization, self).set_data(
-            data=data, data_transform_fn=data_transform_fn, n=n)
+    def compute_scales(
+            self, data_factory, compute_normalization=True, n=None):
         if self.scale_columns and compute_normalization:
             print("Looping through the entire dataset once to get some stats")
 
             colsums = []
             col_nonzero_Ns = []
             N = 0
-            for batch in iter(data):
+            for batch in iter(data_factory()):
                 colsums += [
                     tf.reduce_sum(
                         batch[self.count_key],

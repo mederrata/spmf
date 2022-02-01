@@ -10,8 +10,8 @@ from mederrata_spmf import PoissonFactorization
 
 def main():
     N = 50000
-    D = 3500
-    P = 250
+    D = 350
+    P = 50
 
     # Test taking in from tf.dataset, don't pre-batch
     data = tf.data.Dataset.from_tensor_slices(
@@ -19,30 +19,23 @@ def main():
             'counts': np.random.poisson(1.0, size=(N, D)),
             'indices': np.arange(N),
             'normalization': np.ones(N)
-        }).batch(1000)
+        })
 
-    # data = data.batch(1000)
-    # strategy = tf.distribute.MirroredStrategy()
+    def data_factory(batch_size=1000):
+        ds = data.shuffle(1000)
+        ds = ds.batch(batch_size)
+        return ds
+
     strategy = None
     factor = PoissonFactorization(
         latent_dim=P, feature_dim=D,
         strategy=strategy,  # horseshoe_plus=False,
         dtype=tf.float64)
-    # Test to make sure sampling works
-    sample = factor.sample()
-    # Compute the joint log probability of the sample
-    probs = factor.prior_distribution.log_prob(sample)
-    sample_surrogate = factor.surrogate_distribution.sample(77)
-    probs_parts = factor.unormalized_log_prob_parts(
-        **sample_surrogate, data=next(iter(data)))
-    prob = factor.unormalized_log_prob(
-        **sample_surrogate,  data=next(iter(data)))
 
-    losses = factor.calibrate_advi(
-        data=data, num_epochs=20, rel_tol=1e-4, learning_rate=.005)
+    factor.compute_scales(data_factory=data_factory)
 
-    waic = factor.waic()
-    print(waic)
+    losses = factor.fit(
+        data_factory=data_factory, num_epochs=20, rel_tol=1e-4, learning_rate=.005)
 
 
 if __name__ == "__main__":
