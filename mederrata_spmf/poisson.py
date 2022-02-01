@@ -59,7 +59,7 @@ class PoissonFactorization(BayesianModel):
     def __init__(
             self,
             latent_dim=None, feature_dim=None,
-            u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
+            u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.99,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, scale_rows=True, log_transform=False,
             horshoe_plus=True, column_norms=None, count_key='counts',
@@ -405,7 +405,7 @@ class PoissonFactorization(BayesianModel):
         surrogate_dict = {
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -10.*tf.ones(
+                    -6.*tf.ones(
                         (self.latent_dim, self.feature_dim),
                         dtype=self.dtype),
                     5e-4*tf.ones((self.latent_dim, self.feature_dim),
@@ -416,7 +416,7 @@ class PoissonFactorization(BayesianModel):
             ),
             'w': self.bijectors['w'](
                 build_trainable_normal_dist(
-                    -8*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    -6*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     5e-4*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
@@ -428,7 +428,7 @@ class PoissonFactorization(BayesianModel):
                 **surrogate_dict,
                 'u': self.bijectors['u'](
                     build_trainable_normal_dist(
-                        -9.*tf.ones((self.feature_dim, self.latent_dim),
+                        -6.*tf.ones((self.feature_dim, self.latent_dim),
                                     dtype=self.dtype),
                         5e-4*tf.ones(
                             (self.feature_dim, self.latent_dim),
@@ -581,22 +581,13 @@ class PoissonFactorization(BayesianModel):
             list(prob_parts.values()))
         return value
 
-    def unormalized_log_prob_parts(self, data=None, **params):
+    def unormalized_log_prob_parts(self, data, **params):
         """Energy function
         Keyword Arguments:
             data {dict} -- Should be a single batch (default: {None})
         Returns:
             tf.Tensor -- Energy of broadcasted shape
         """
-
-        # We don't use indices so let's just get rid of them
-        if data is None:
-            #  use self.data, taking the next batch
-            try:
-                data = next(self.dataset_cycler)
-            except tf.errors.OutOfRangeError:
-                self.dataset_iterator = cycle(iter(self.data))
-                data = next(self.dataset_iterator)
 
         prior_parts = self.prior_distribution.log_prob_parts(params)
         log_likelihood = self.log_likelihood_components(data=data, **params)['log_likelihood']

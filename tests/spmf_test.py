@@ -9,7 +9,7 @@ from mederrata_spmf import PoissonFactorization
 
 
 def main():
-    N = 50000
+    N = 500000
     D = 350
     P = 50
 
@@ -21,21 +21,24 @@ def main():
             'normalization': np.ones(N)
         })
 
-    def data_factory(batch_size=1000):
-        ds = data.shuffle(1000)
+    def data_factory(batch_size=10000):
+        ds = data.shuffle(10000)
         ds = ds.batch(batch_size)
         return ds
 
-    strategy = None
     factor = PoissonFactorization(
-        latent_dim=P, feature_dim=D,
-        strategy=strategy,  # horseshoe_plus=False,
+        latent_dim=P, feature_dim=D, u_tau_scale=1.0/np.sqrt(N*D),
         dtype=tf.float64)
 
     factor.compute_scales(data_factory=data_factory)
 
     losses = factor.fit(
-        data_factory=data_factory, num_epochs=20, rel_tol=1e-4, learning_rate=.005)
+        data_factory=data_factory,
+        sample_size=20,
+        num_epochs=20,
+        rel_tol=1e-4,
+        learning_rate=.01)
+    print(losses)
 
 
 if __name__ == "__main__":
