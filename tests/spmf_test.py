@@ -25,7 +25,7 @@ def main():
     # strategy = tf.distribute.MirroredStrategy()
     strategy = None
     factor = PoissonFactorization(
-        data, latent_dim=P, feature_dim=D,
+        latent_dim=P, feature_dim=D,
         strategy=strategy,  # horseshoe_plus=False,
         dtype=tf.float64)
     # Test to make sure sampling works
@@ -39,10 +39,11 @@ def main():
         **sample_surrogate,  data=next(iter(data)))
 
     losses = factor.calibrate_advi(
-        num_epochs=20, rel_tol=1e-4, learning_rate=.005)
+        data=data, num_epochs=20, rel_tol=1e-4, learning_rate=.005)
 
     waic = factor.waic()
     print(waic)
+
 
 if __name__ == "__main__":
     main()

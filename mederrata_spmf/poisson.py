@@ -57,7 +57,7 @@ class PoissonFactorization(BayesianModel):
         return tf.cast(x, self.dtype)*tf.cast(self.eta_i, self.dtype)
 
     def __init__(
-            self, data=None, data_transform_fn=None,
+            self,
             latent_dim=None, feature_dim=None,
             u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
             strategy=None, encoder_function=None, decoder_function=None,
@@ -65,14 +65,7 @@ class PoissonFactorization(BayesianModel):
             horshoe_plus=True, column_norms=None, count_key='counts',
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
-        Arguments:
-            data {tf.data.Dataset} -- a BatchDataset object that
-                             we will iterate for training
-                              (default: {None})
         Keyword Arguments:
-            data_transform_fn {function} -- Not currently used,
-                but intended to allow for specification
-                of a preprocessing function (default: {None})
             latent_dim {int]} -- P (default: {None})
             u_tau_scale {float} -- Global shrinkage scale on u (default: {1.})
             s_tau_scale {int} -- Global shrinkage scale on s (default: {1})
@@ -100,11 +93,6 @@ class PoissonFactorization(BayesianModel):
             self.eta_i = column_norms
         self.count_key = count_key
 
-        if data is not None:
-            self.set_data(
-                data, data_transform_fn,
-                compute_normalization=(column_norms is None)
-            )
         if encoder_function is not None:
             self.encoder_function = encoder_function
         if decoder_function is not None:
@@ -193,11 +181,14 @@ class PoissonFactorization(BayesianModel):
         rate = theta_beta + phi
         rv_poisson = tfd.Poisson(rate=rate)
 
-        return rv_poisson.log_prob(
-            tf.cast(data[self.count_key], self.dtype))
+        return {
+            'log_likelihood': rv_poisson.log_prob(
+                tf.cast(data[self.count_key], self.dtype)),
+            'rate': rate
+        }
 
     # @tf.function
-    def log_likelihood(
+    def predictive_distribution(
             self, s, u, v, w, data, *args, **kwargs):
         """Returns the log likelihood, summed over rows
         Arguments:
@@ -211,14 +202,16 @@ class PoissonFactorization(BayesianModel):
             [tf.Tensor] -- log likelihood in broadcasted shape
         """
 
-        ll = self.log_likelihood_components(
+        prediction = self.log_likelihood_components(
             s=s, u=u, v=v, w=w, data=data, *args, **kwargs)
 
         reduce_dim = len(u.shape) - 2
         if reduce_dim > 0:
-            ll = tf.reduce_sum(ll, -np.arange(reduce_dim)-1)
+            prediction['ll'] = tf.reduce_sum(
+                prediction['ll'],
+                -np.arange(reduce_dim)-1)
 
-        return ll
+        return prediction
 
     def create_distributions(self):
         """Create distribution objects
@@ -608,7 +601,7 @@ class PoissonFactorization(BayesianModel):
                 data = next(self.dataset_iterator)
 
         prior_parts = self.prior_distribution.log_prob_parts(params)
-        log_likelihood = self.log_likelihood_components(data=data, **params)
+        log_likelihood = self.log_likelihood_components(data=data, **params)['log_likelihood']
 
         # For prior on theta
 
@@ -653,7 +646,7 @@ class PoissonFactorization(BayesianModel):
             tf.debugging.check_numerics(encoding, message='Checking encoding')
         except Exception as e:
             assert (
-                "Checking encoding : Tensor had NaN values" 
+                "Checking encoding : Tensor had NaN values"
                 in encoding.message)
         z = tf.matmul(
             self.encoder_function(
@@ -787,8 +780,8 @@ class PoissonAutoencoder(PoissonFactorization):
         var_list = self.neural_network_model.var_list
         self.var_list = var_list
         # rewrite the log_likelihood signature with the variable names
-        # function_string = f"lambda self, data, 
-        #   {', '.join(var_list)}: 
+        # function_string = f"lambda self, data,
+        #   {', '.join(var_list)}:
         #   self.log_likelihood(
         #       data, {', '.join([str(v) + '=' + str(v) for v in var_list])})"
         # self.log_likelihood = eval(function_string, globals(), self.__dict__)
@@ -803,7 +796,7 @@ class PoissonAutoencoder(PoissonFactorization):
 
         self.set_calibration_expectations()
 
-    def log_likelihood(self, data, **params):
+    def predictive_distribution(self, data, **params):
         neural_networks = self.neural_network_model.assemble_networks(params)
         rates = tf.math.exp(
             neural_networks(
@@ -822,7 +815,11 @@ class PoissonAutoencoder(PoissonFactorization):
             tf.cast(data['data'], self.dtype)[tf.newaxis, ...])
         log_lik = tf.reduce_sum(log_lik, axis=-1)
         log_lik = tf.reduce_sum(log_lik, axis=-1)
-        return log_lik
+
+        return {
+            "log_likelihood": log_lik,
+            "rates": rates
+        }
 
     def unormalized_log_prob_parts(self, data=None, **params):
         if data is None:
