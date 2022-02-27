@@ -40,9 +40,6 @@ setuptools.setup(
         'arviz',
         'numpy',
         'pandas',
-        'tensorflow>=2.7.0',
-        'tensorflow-probability>=0.15.0',
-        'tensorflow-addons>=0.15.0',
         'bayesianquilts@git+https://github.com/mederrata/bayesianquilts.git'
     ],
     dependency_links=[
