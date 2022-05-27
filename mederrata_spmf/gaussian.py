@@ -595,14 +595,14 @@ class GaussianFactorization(BayesianModel):
         self.var_list = list(surrogate_dict.keys())
         self.set_calibration_expectations()
 
-    def unormalized_log_prob(self, data=None, **params):
+    def unormalized_log_prob(self, data=None, prior_weight=1., **params):
         prob_parts = self.unormalized_log_prob_parts(
-            data, **params)
+            data=data, prior_weight=prior_weight, **params)
         value = tf.add_n(
             list(prob_parts.values()))
         return value
 
-    def unormalized_log_prob_parts(self, data=None, **params):
+    def unormalized_log_prob_parts(self, data=None, prior_weight=1., **params):
         """Energy function
         Keyword Arguments:
             data {dict} -- Should be a single batch (default: {None})
@@ -620,6 +620,7 @@ class GaussianFactorization(BayesianModel):
                 data = next(self.dataset_iterator)
 
         prior_parts = self.prior_distribution.log_prob_parts(params)
+        prior_parts = {k: prior_weight*v for k, v in prior_parts.items()}
         log_likelihood = self.log_likelihood_components(data=data, **params)
 
         # For prior on theta

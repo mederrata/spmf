@@ -18,9 +18,12 @@ from bayesianquilts.distributions import SqrtInverseGamma, AbsHorseshoe
 from bayesianquilts.nn.dense import DenseHorseshoe
 
 from bayesianquilts.util import (
-    build_trainable_InverseGamma_dist, build_trainable_normal_dist,
-    run_chain, clip_gradients, build_surrogate_posterior,
-    fit_surrogate_posterior)
+
+    run_chain, clip_gradients,
+)
+
+from bayesianquilts.vi.advi import (
+    build_surrogate_posterior, build_trainable_InverseGamma_dist, build_trainable_normal_dist,)
 
 tfb = tfp.bijectors
 
@@ -574,14 +577,14 @@ class PoissonFactorization(BayesianModel):
         self.var_list = list(surrogate_dict.keys())
         self.set_calibration_expectations()
 
-    def unormalized_log_prob(self, data=None, **params):
+    def unormalized_log_prob(self, data=None, prior_weight=1., **params):
         prob_parts = self.unormalized_log_prob_parts(
-            data, **params)
+            data, prior_weight=1., **params)
         value = tf.add_n(
             list(prob_parts.values()))
         return value
 
-    def unormalized_log_prob_parts(self, data, **params):
+    def unormalized_log_prob_parts(self, data, prior_weight=1., **params):
         """Energy function
         Keyword Arguments:
             data {dict} -- Should be a single batch (default: {None})
@@ -590,7 +593,9 @@ class PoissonFactorization(BayesianModel):
         """
 
         prior_parts = self.prior_distribution.log_prob_parts(params)
-        log_likelihood = self.log_likelihood_components(data=data, **params)['log_likelihood']
+        prior_parts = {k: v*prior_weight for k, v in prior_parts.items()}
+        log_likelihood = self.log_likelihood_components(
+            data=data, **params)['log_likelihood']
 
         # For prior on theta
 
