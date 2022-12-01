@@ -36,13 +36,6 @@ setuptools.setup(
     python_requires='>=3.6',
     install_requires=[
         'dill>=0.3.1.1',
-        'matplotlib>=3.1',
-        'arviz>=0.10.0',
-        'numpy~=1.19.2',
-        'pandas>=1.0.0, <1.2.0',
-        'tensorflow>=2.6.1',
-        'tensorflow-probability>=0.14.0',
-        'tensorflow-addons>=0.14.0',
         'bayesianquilts@git+https://github.com/mederrata/bayesianquilts.git'
     ],
     dependency_links=[
