@@ -18,9 +18,12 @@ from bayesianquilts.distributions import SqrtInverseGamma, AbsHorseshoe
 from bayesianquilts.nn.dense import DenseHorseshoe
 
 from bayesianquilts.util import (
-    build_trainable_InverseGamma_dist, build_trainable_normal_dist,
-    run_chain, clip_gradients, build_surrogate_posterior,
-    fit_surrogate_posterior)
+
+    run_chain, clip_gradients,
+)
+
+from bayesianquilts.vi.advi import (
+    build_surrogate_posterior, build_trainable_InverseGamma_dist, build_trainable_normal_dist,)
 
 tfb = tfp.bijectors
 
@@ -57,33 +60,27 @@ class PoissonFactorization(BayesianModel):
         return tf.cast(x, self.dtype)*tf.cast(self.eta_i, self.dtype)
 
     def __init__(
-            self, data=None, data_transform_fn=None,
+            self,
             latent_dim=None, feature_dim=None,
-            u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.5,
+            u_tau_scale=0.01, s_tau_scale=1., symmetry_breaking_decay=0.99,
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, scale_rows=True, log_transform=False,
             horshoe_plus=True, column_norms=None, count_key='counts',
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
-        Arguments:
-            data {[type]} -- a BatchDataset object that
-                             we will iterate for training
-                              (default: {None})
         Keyword Arguments:
-            data_transform_fn {[type]} -- Not currently used,
-                but intended to allow for specification
-                of a preprocessing function (default: {None})
-            latent_dim {[type]} -- P (default: {None})
-            u_tau_scale {[type]} -- Global shrinkage scale on u (default: {1.})
+            latent_dim {int]} -- P (default: {None})
+            u_tau_scale {float} -- Global shrinkage scale on u (default: {1.})
             s_tau_scale {int} -- Global shrinkage scale on s (default: {1})
             symmetry_breaking_decay {float} -- Decay factor along dimensions
                                                 on u (default: {0.5})
-            strategy {[type]} -- For multi-GPU (default: {None})
-            decoder_function {[type]} -- f(x) (default: {None})
-            encoder_function {[type]} -- g(x) (default: {None})
+            strategy {tf.strategy} -- For multi-GPU (default: {None})
+            decoder_function {function} -- f(x) (default: {lambda x: x/scale})
+            encoder_function {function} -- g(x) (default: {lambda x: x/scale})
             scale_columns {bool} -- Scale the rates by the mean of the
                 first batch (default: {True})
             scale_row {bool} -- Scale by normalized row sums (default: {True})
+            horseshe_plus {bool} -- Whether to use hierarchical horseshoe plus (default : {True})
             dtype {[type]} -- [description] (default: {tf.float64})
         """
 
@@ -97,12 +94,8 @@ class PoissonFactorization(BayesianModel):
         self.xi_u_global = 1.
         if column_norms is not None:
             self.eta_i = column_norms
+        self.count_key = count_key
 
-        if data is not None:
-            self.set_data(
-                data, data_transform_fn,
-                compute_normalization=(column_norms is None)
-            )
         if encoder_function is not None:
             self.encoder_function = encoder_function
         if decoder_function is not None:
@@ -117,23 +110,20 @@ class PoissonFactorization(BayesianModel):
 
         self.u_tau_scale = u_tau_scale
         self.s_tau_scale = s_tau_scale
-        self.count_key = count_key
 
         self.create_distributions()
         print(
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
 
-    def set_data(
-            self, data, data_transform_fn=None, compute_normalization=True, n=None):
-        super(PoissonFactorization, self).set_data(
-            data=data, data_transform_fn=data_transform_fn, n=n)
+    def compute_scales(
+            self, data_factory, compute_normalization=True, n=None):
         if self.scale_columns and compute_normalization:
             print("Looping through the entire dataset once to get some stats")
 
             colsums = []
             col_nonzero_Ns = []
             N = 0
-            for batch in iter(data):
+            for batch in iter(data_factory()):
                 colsums += [
                     tf.reduce_sum(
                         batch[self.count_key],
@@ -192,11 +182,14 @@ class PoissonFactorization(BayesianModel):
         rate = theta_beta + phi
         rv_poisson = tfd.Poisson(rate=rate)
 
-        return rv_poisson.log_prob(
-            tf.cast(data[self.count_key], self.dtype))
+        return {
+            'log_likelihood': rv_poisson.log_prob(
+                tf.cast(data[self.count_key], self.dtype)),
+            'rate': rate
+        }
 
     # @tf.function
-    def log_likelihood(
+    def predictive_distribution(
             self, s, u, v, w, data, *args, **kwargs):
         """Returns the log likelihood, summed over rows
         Arguments:
@@ -210,14 +203,16 @@ class PoissonFactorization(BayesianModel):
             [tf.Tensor] -- log likelihood in broadcasted shape
         """
 
-        ll = self.log_likelihood_components(
+        prediction = self.log_likelihood_components(
             s=s, u=u, v=v, w=w, data=data, *args, **kwargs)
 
         reduce_dim = len(u.shape) - 2
         if reduce_dim > 0:
-            ll = tf.reduce_sum(ll, -np.arange(reduce_dim)-1)
+            prediction['ll'] = tf.reduce_sum(
+                prediction['ll'],
+                -np.arange(reduce_dim)-1)
 
-        return ll
+        return prediction
 
     def create_distributions(self):
         """Create distribution objects
@@ -392,7 +387,7 @@ class PoissonFactorization(BayesianModel):
                     AbsHorseshoe(
                         scale=(
                             self.u_tau_scale*symmetry_breaking_decay*tf.ones(
-                                (1, self.latent_dim),
+                                (self.feature_dim, self.latent_dim),
                                 dtype=self.dtype
                             )
                         ), reinterpreted_batch_ndims=2
@@ -413,7 +408,7 @@ class PoissonFactorization(BayesianModel):
         surrogate_dict = {
             'v': self.bijectors['v'](
                 build_trainable_normal_dist(
-                    -5*tf.ones(
+                    -6.*tf.ones(
                         (self.latent_dim, self.feature_dim),
                         dtype=self.dtype),
                     5e-4*tf.ones((self.latent_dim, self.feature_dim),
@@ -424,8 +419,8 @@ class PoissonFactorization(BayesianModel):
             ),
             'w': self.bijectors['w'](
                 build_trainable_normal_dist(
-                    0.5*tf.ones((1, self.feature_dim), dtype=self.dtype),
-                    1e-3*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    -6*tf.ones((1, self.feature_dim), dtype=self.dtype),
+                    5e-4*tf.ones((1, self.feature_dim), dtype=self.dtype),
                     2,
                     strategy=self.strategy
                 )
@@ -563,7 +558,7 @@ class PoissonFactorization(BayesianModel):
                 ),
                 'u': self.bijectors['u'](
                     build_trainable_normal_dist(
-                        -8.*tf.ones((self.feature_dim, self.latent_dim),
+                        -9.*tf.ones((self.feature_dim, self.latent_dim),
                                     dtype=self.dtype),
                         5e-4*tf.ones(
                             (self.feature_dim, self.latent_dim),
@@ -582,14 +577,14 @@ class PoissonFactorization(BayesianModel):
         self.var_list = list(surrogate_dict.keys())
         self.set_calibration_expectations()
 
-    def unormalized_log_prob(self, data=None, **params):
+    def unormalized_log_prob(self, data=None, prior_weight=1., **params):
         prob_parts = self.unormalized_log_prob_parts(
-            data, **params)
+            data, prior_weight=1., **params)
         value = tf.add_n(
             list(prob_parts.values()))
         return value
 
-    def unormalized_log_prob_parts(self, data=None, **params):
+    def unormalized_log_prob_parts(self, data, prior_weight=1., **params):
         """Energy function
         Keyword Arguments:
             data {dict} -- Should be a single batch (default: {None})
@@ -597,17 +592,10 @@ class PoissonFactorization(BayesianModel):
             tf.Tensor -- Energy of broadcasted shape
         """
 
-        # We don't use indices so let's just get rid of them
-        if data is None:
-            #  use self.data, taking the next batch
-            try:
-                data = next(self.dataset_cycler)
-            except tf.errors.OutOfRangeError:
-                self.dataset_iterator = cycle(iter(self.data))
-                data = next(self.dataset_iterator)
-
         prior_parts = self.prior_distribution.log_prob_parts(params)
-        log_likelihood = self.log_likelihood_components(data=data, **params)
+        prior_parts = {k: v*prior_weight for k, v in prior_parts.items()}
+        log_likelihood = self.log_likelihood_components(
+            data=data, **params)['log_likelihood']
 
         # For prior on theta
 
@@ -652,7 +640,7 @@ class PoissonFactorization(BayesianModel):
             tf.debugging.check_numerics(encoding, message='Checking encoding')
         except Exception as e:
             assert (
-                "Checking encoding : Tensor had NaN values" 
+                "Checking encoding : Tensor had NaN values"
                 in encoding.message)
         z = tf.matmul(
             self.encoder_function(
@@ -786,8 +774,8 @@ class PoissonAutoencoder(PoissonFactorization):
         var_list = self.neural_network_model.var_list
         self.var_list = var_list
         # rewrite the log_likelihood signature with the variable names
-        # function_string = f"lambda self, data, 
-        #   {', '.join(var_list)}: 
+        # function_string = f"lambda self, data,
+        #   {', '.join(var_list)}:
         #   self.log_likelihood(
         #       data, {', '.join([str(v) + '=' + str(v) for v in var_list])})"
         # self.log_likelihood = eval(function_string, globals(), self.__dict__)
@@ -802,7 +790,7 @@ class PoissonAutoencoder(PoissonFactorization):
 
         self.set_calibration_expectations()
 
-    def log_likelihood(self, data, **params):
+    def predictive_distribution(self, data, **params):
         neural_networks = self.neural_network_model.assemble_networks(params)
         rates = tf.math.exp(
             neural_networks(
@@ -821,7 +809,11 @@ class PoissonAutoencoder(PoissonFactorization):
             tf.cast(data['data'], self.dtype)[tf.newaxis, ...])
         log_lik = tf.reduce_sum(log_lik, axis=-1)
         log_lik = tf.reduce_sum(log_lik, axis=-1)
-        return log_lik
+
+        return {
+            "log_likelihood": log_lik,
+            "rates": rates
+        }
 
     def unormalized_log_prob_parts(self, data=None, **params):
         if data is None:
