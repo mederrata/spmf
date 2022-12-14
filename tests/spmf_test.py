@@ -33,8 +33,11 @@ def main():
     factor.compute_scales(data_factory=data_factory)
 
     losses = factor.fit(
-        data_factory=data_factory,
+        batched_data_factory=data_factory,
+        dataset_size=500000,
+        batch_size=10000,
         sample_size=20,
+        sample_batches=4,
         num_epochs=20,
         rel_tol=1e-4,
         learning_rate=.01)
