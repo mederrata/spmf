@@ -66,6 +66,7 @@ class PoissonFactorization(BayesianModel):
             strategy=None, encoder_function=None, decoder_function=None,
             scale_columns=True, scale_rows=True, log_transform=False,
             horshoe_plus=True, column_norms=None, count_key='counts',
+            initialize_distributions=True,
             dtype=tf.float64, **kwargs):
         """Instantiate PMF object
         Keyword Arguments:
@@ -110,8 +111,8 @@ class PoissonFactorization(BayesianModel):
 
         self.u_tau_scale = u_tau_scale
         self.s_tau_scale = s_tau_scale
-
-        self.create_distributions()
+        if initialize_distributions:
+            self.create_distributions()
         print(
             f"Feature dim: {self.feature_dim} -> Latent dim {self.latent_dim}")
 
