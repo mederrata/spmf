@@ -188,13 +188,13 @@ class BernoulliFactorization(PoissonFactorization):
         """Create distribution objects"""
         self.bijectors = {
             "u": tfb.Softplus(),
-            "v": tfb.Softplus(),
+            "v": tfb.Identity(),
             "u_eta": tfb.Softplus(),
             "u_tau": tfb.Softplus(),
             "s": tfb.Softplus(),
             "s_eta": tfb.Softplus(),
             "s_tau": tfb.Softplus(),
-            "w": tfb.Softplus(),
+            "w": tfb.Identity(),
         }
         symmetry_breaking_decay = (
             self.symmetry_breaking_decay
@@ -203,14 +203,19 @@ class BernoulliFactorization(PoissonFactorization):
 
         distribution_dict = {
             "v": tfd.Independent(
-                tfd.HalfNormal(
+                tfd.Normal(
+                    loc=0.1
+                    * tf.zeros((self.latent_dim, self.feature_dim), dtype=self.dtype),
                     scale=0.1
                     * tf.ones((self.latent_dim, self.feature_dim), dtype=self.dtype)
                 ),
                 reinterpreted_batch_ndims=2,
             ),
             "w": tfd.Independent(
-                tfd.HalfNormal(scale=tf.ones((1, self.feature_dim), dtype=self.dtype)),
+                tfd.Normal(
+                    loc=tf.zeros((1, self.feature_dim), dtype=self.dtype),
+                    scale=tf.ones((1, self.feature_dim), dtype=self.dtype)
+                    ),
                 reinterpreted_batch_ndims=2,
             ),
         }
