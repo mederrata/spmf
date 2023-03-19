@@ -19,7 +19,7 @@ from bayesianquilts.nn.dense import DenseHorseshoe
 
 from bayesianquilts.util import (
     build_trainable_InverseGamma_dist, build_trainable_normal_dist,
-    run_chain, clip_gradients, build_surrogate_posterior,
+    build_surrogate_posterior,
     fit_surrogate_posterior)
 
 tfb = tfp.bijectors

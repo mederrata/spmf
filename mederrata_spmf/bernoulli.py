@@ -17,10 +17,6 @@ from bayesianquilts.model import BayesianModel
 from bayesianquilts.distributions import SqrtInverseGamma, AbsHorseshoe
 from bayesianquilts.nn.dense import DenseHorseshoe
 
-from bayesianquilts.util import (
-    run_chain,
-    clip_gradients,
-)
 
 from bayesianquilts.vi.advi import (
     build_surrogate_posterior,

@@ -10,17 +10,11 @@ import functools
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-from tensorflow.python.data.ops.dataset_ops import BatchDataset
 from tensorflow_probability import distributions as tfd
 
 from bayesianquilts.model import BayesianModel
 from bayesianquilts.distributions import SqrtInverseGamma, AbsHorseshoe
 from bayesianquilts.nn.dense import DenseHorseshoe
-
-from bayesianquilts.util import (
-
-    run_chain, clip_gradients,
-)
 
 from bayesianquilts.vi.advi import (
     build_surrogate_posterior, build_trainable_InverseGamma_dist, build_trainable_normal_dist,)
