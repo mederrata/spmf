@@ -34,11 +34,11 @@ def main():
 
     losses = factor.fit(
         batched_data_factory=data_factory,
-        dataset_size=500000,
-        batch_size=10000,
+        dataset_size=5000,
+        batch_size=10,
         sample_size=20,
         sample_batches=4,
-        num_epochs=20,
+        num_steps=20,
         rel_tol=1e-4,
         learning_rate=.01)
     print(losses)

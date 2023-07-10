@@ -119,7 +119,7 @@ def main():
         dtype=tf.float64)
 
     factor.calibrate_advi(
-        num_epochs=_EPOCH_NUMBER,
+        num_steps=_EPOCH_NUMBER,
         rel_tol=1e-4, clip_value=_CLIP_VALUE,
         learning_rate=_LEARNING_RATE)
 

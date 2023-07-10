@@ -99,7 +99,7 @@ factor = PoissonMatrixFactorization(
     )
 
 losses = factor.calibrate_advi(
-    num_epochs=500, learning_rate=0.01,
+    num_steps=500, learning_rate=0.01,
     abs_tol=1e-3, rel_tol=1e-3,
     clip_value=10.,
     )
