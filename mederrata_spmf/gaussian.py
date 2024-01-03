@@ -17,10 +17,12 @@ from bayesianquilts.model import BayesianModel
 from bayesianquilts.distributions import SqrtInverseGamma, AbsHorseshoe
 from bayesianquilts.nn.dense import DenseHorseshoe
 
-from bayesianquilts.util import (
+from bayesianquilts.vi.advi import (
     build_trainable_InverseGamma_dist, build_trainable_normal_dist,
-    build_surrogate_posterior,
-    fit_surrogate_posterior)
+    build_surrogate_posterior)
+
+from bayesianquilts.vi.minibatch import fit_surrogate_posterior
+
 
 tfb = tfp.bijectors
 
