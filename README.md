@@ -1,3 +1,5 @@
+We are deprecating this repository. Please refer to this repository: https://github.com/mederrata/bayesianquilts/tree/main/bayesianquilts/models/spmf
+
 # (S)parsley-encoded (P)oisson (M)atrix (F)actorization
 
 Implemented using Tensorflow-probability.
